@@ -1,0 +1,7 @@
+# Local-only overrides for this machine.
+# This file is copied to ~/.localrc on first bootstrap if it does not exist.
+
+# export PROJECTS="$HOME/projects"
+# export http_proxy="http://proxy.example:8080"
+# export https_proxy="http://proxy.example:8080"
+# export OPENAI_API_KEY=""

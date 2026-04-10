@@ -1,0 +1,3 @@
+# Arch-family specific additions and package name differences.
+fd
+base-devel

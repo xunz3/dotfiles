@@ -1,0 +1,5 @@
+# openSUSE-specific additions and package name differences.
+fd
+gcc
+gcc-c++
+make

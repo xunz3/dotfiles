@@ -1,13 +1,205 @@
 #!/usr/bin/env bash
 #
-# Run all dotfiles installers.
+# Run package installation and topic installers.
 
-set -e
+set -euo pipefail
 
-cd "$(dirname $0)"/..
+cd "$(dirname "$0")/.."
+DOTFILES_ROOT=$(pwd -P)
+print_only=false
+install_profile="${DOTFILES_INSTALL_PROFILE:-base}"
+install_toolchains="${DOTFILES_INSTALL_TOOLCHAINS:-0}"
 
-echo "› brew bundle"
-brew bundle
+info () {
+	printf "\r  [ \033[00;34m..\033[0m ] %s\n" "$1"
+}
 
-# find the installers and run them iteratively
-find . -name install.sh | while read installer ; do sh -c "${installer}" ; done
+success () {
+	printf "\r\033[2K  [ \033[00;32mOK\033[0m ] %s\n" "$1"
+}
+
+fail () {
+	printf "\r\033[2K  [\033[0;31mFAIL\033[0m] %s\n" "$1" >&2
+	exit 1
+}
+
+usage () {
+	cat <<'EOF'
+Usage: script/install [options]
+
+Options:
+  --print, --list   print the package list for the current machine
+  --enhanced       include enhanced package lists and optional toolchains
+  --toolchains     enable the optional toolchain installer for this run
+  -h, --help        show this help text
+EOF
+}
+
+have_command () {
+	command -v "$1" >/dev/null 2>&1
+}
+
+run_as_root () {
+	if [[ "${EUID}" -eq 0 ]]
+	then
+		"$@"
+	else
+		sudo "$@"
+	fi
+}
+
+read_package_file () {
+	local package_file=$1
+
+	if [[ ! -f "$package_file" ]]
+	then
+		return
+	fi
+
+	grep -vE '^\s*#|^\s*$' "$package_file"
+}
+
+detect_package_manager () {
+	if have_command apt-get
+	then
+		printf 'apt'
+	elif have_command dnf
+	then
+		printf 'dnf'
+	elif have_command pacman
+	then
+		printf 'pacman'
+	elif have_command zypper
+	then
+		printf 'zypper'
+	else
+		return 1
+	fi
+}
+
+resolve_packages () {
+	local manager=$1
+
+	{
+		read_package_file "$DOTFILES_ROOT/packages/common.txt"
+		read_package_file "$DOTFILES_ROOT/packages/${manager}.txt"
+		if [[ "$install_profile" == "enhanced" ]]
+		then
+			read_package_file "$DOTFILES_ROOT/packages/common-enhanced.txt"
+			read_package_file "$DOTFILES_ROOT/packages/${manager}-enhanced.txt"
+		fi
+	} | awk '!seen[$0]++'
+}
+
+print_packages () {
+	local manager=$1
+	shift
+
+	printf 'package manager: %s\n' "$manager"
+	printf 'profile: %s\n' "$install_profile"
+
+	if [[ $# -eq 0 ]]
+	then
+		printf '(no packages configured)\n'
+		return
+	fi
+
+	printf '%s\n' "$@"
+}
+
+install_linux_packages () {
+	local manager=''
+	if ! manager="$(detect_package_manager)"
+	then
+		fail 'no supported package manager found (apt-get, dnf, pacman, zypper)'
+	fi
+
+	mapfile -t packages < <(resolve_packages "$manager")
+
+	if [[ "$print_only" == "true" ]]
+	then
+		print_packages "$manager" "${packages[@]}"
+		return
+	fi
+
+	if [[ "${DOTFILES_SKIP_PACKAGES:-0}" == "1" ]]
+	then
+		info 'skipping package installation because DOTFILES_SKIP_PACKAGES=1'
+		return
+	fi
+
+	if [[ ${#packages[@]} -eq 0 ]]
+	then
+		info "no packages listed for $manager"
+		return
+	fi
+
+	info "installing packages with $manager"
+	case "$manager" in
+		apt)
+			run_as_root apt-get update
+			run_as_root apt-get install -y "${packages[@]}"
+			;;
+		dnf)
+			run_as_root dnf install -y "${packages[@]}"
+			;;
+		pacman)
+			run_as_root pacman -S --needed --noconfirm "${packages[@]}"
+			;;
+		zypper)
+			run_as_root zypper --non-interactive install "${packages[@]}"
+			;;
+	esac
+	success "$manager packages installed"
+}
+
+run_topic_installers () {
+	export DOTFILES_INSTALL_PROFILE="$install_profile"
+	export DOTFILES_INSTALL_TOOLCHAINS="$install_toolchains"
+
+	while IFS= read -r -d '' installer
+	do
+		info "running ${installer#"$DOTFILES_ROOT/"}"
+		"$installer"
+	done < <(find "$DOTFILES_ROOT" -mindepth 2 -maxdepth 2 -name install.sh -print0)
+}
+
+while [[ $# -gt 0 ]]
+do
+	case "$1" in
+		--print|--list)
+			print_only=true
+			;;
+		--enhanced)
+			install_profile="enhanced"
+			install_toolchains=1
+			;;
+		--toolchains)
+			install_toolchains=1
+			;;
+		-h|--help)
+			usage
+			exit 0
+			;;
+		*)
+			fail "unknown option: $1"
+			;;
+	esac
+	shift
+done
+
+case "$(uname -s)" in
+	Linux)
+		install_linux_packages
+		;;
+	*)
+		fail "unsupported operating system: $(uname -s) (this repo is Linux-only)"
+		;;
+esac
+
+if [[ "$print_only" == "true" ]]
+then
+	exit 0
+fi
+
+run_topic_installers

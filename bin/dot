@@ -1,65 +1,121 @@
-#!/bin/sh
+#!/usr/bin/env bash
 #
 # dot
 #
-# `dot` handles installation, updates, things like that. Run it periodically
-# to make sure you're on the latest and greatest.
+# `dot` is the main entry point for this dotfiles repository.
 
-set -e
+set -euo pipefail
 
-parentDirectory="$(cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd -P)"
-dotfilesDirectory="$(cd "$( dirname "$parentDirectory" )" && pwd -P)"
+parent_directory="$(cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd -P)"
+dotfiles_directory="$(cd "$( dirname "$parent_directory" )" && pwd -P)"
 
-displayUsageAndExit() {
-	echo "dot -- dotfiles management"
-	echo ""
-	echo "Usage: dot [options]"
-	echo ""
-	echo "Options:"
-	echo "  -e, --edit    Open dotfiles directory for editing"
-	echo "  -h, --help    Show this help message and exit"
-	exit
+display_usage_and_exit() {
+	cat <<'EOF'
+dot -- dotfiles management
+
+Usage:
+	dot <command>
+
+Commands:
+	setup       Run bootstrap then install packages
+	setup-safe  Back up conflicting dotfiles, then install packages
+	setup-enhanced Run bootstrap, packages, and optional toolchains
+	bootstrap   Symlink dotfiles into $HOME
+	install     Install packages and run topic installers
+	install-enhanced Install packages, topic installers, and optional toolchains
+	packages    Print the resolved package list for this machine
+	packages-enhanced Print the enhanced package list for this machine
+	toolchains  Run only the optional toolchain installer
+	update      Pull latest changes then run install
+	edit        Open the dotfiles directory in $EDITOR
+	help        Show this help message
+EOF
+	exit 0
 }
 
-while test $# -gt 0; do
-	case "$1" in
-		"-h"|"--help")
-			displayUsageAndExit
-			;;
-		"-e"|"--edit")
-			exec "$EDITOR" "$dotfilesDirectory"
-			exit
-			;;
-		*)
-			echo "Invalid option: $1"
-			displayUsageAndExit
-			;;
-	esac
+require_editor() {
+	if [[ -n "${EDITOR:-}" ]]; then
+		return 0
+	fi
+
+	if command -v code >/dev/null 2>&1; then
+		export EDITOR=code
+	elif command -v nvim >/dev/null 2>&1; then
+		export EDITOR=nvim
+	elif command -v vim >/dev/null 2>&1; then
+		export EDITOR=vim
+	else
+		echo "No editor found. Set EDITOR first." >&2
+		exit 1
+	fi
+}
+
+run_bootstrap() {
+	"$dotfiles_directory/script/bootstrap" "$@"
+}
+
+run_install() {
+	"$dotfiles_directory/script/install" "$@"
+}
+
+run_toolchains() {
+	DOTFILES_INSTALL_TOOLCHAINS=1 "$dotfiles_directory/toolchains/install.sh"
+}
+
+pull_latest() {
+	echo "› git pull"
+	git -C "$dotfiles_directory" pull --ff-only
+}
+
+command_name="${1:-setup}"
+if [[ $# -gt 0 ]]; then
 	shift
-done
+fi
 
-export ZSH=$HOME/.dotfiles
-
-# Update dotfiles themselves
-echo "› git pull"
-git -C $ZSH pull
-
-# Set macOS defaults
-$ZSH/macos/set-defaults.sh
-
-# Set macOS hostname
-$ZSH/macos/set-hostname.sh
-
-# Install homebrew
-$ZSH/homebrew/install.sh 2>&1
-
-# Upgrade homebrew
-echo "› brew update"
-brew update
-
-echo "› brew upgrade"
-brew upgrade
-
-# Install software
-echo "› script/install"
-$ZSH/script/install
+case "$command_name" in
+	setup)
+		run_bootstrap "$@"
+		run_install
+		;;
+	setup-safe)
+		run_bootstrap --backup "$@"
+		run_install
+		;;
+	setup-enhanced)
+		run_bootstrap --backup "$@"
+		run_install --enhanced --toolchains
+		;;
+	bootstrap)
+		run_bootstrap "$@"
+		;;
+	install)
+		run_install "$@"
+		;;
+	install-enhanced)
+		run_install --enhanced --toolchains "$@"
+		;;
+	packages)
+		run_install --print "$@"
+		;;
+	packages-enhanced)
+		run_install --print --enhanced "$@"
+		;;
+	toolchains)
+		run_toolchains
+		;;
+	update)
+		pull_latest
+		run_install
+		;;
+	edit)
+		require_editor
+		exec "$EDITOR" "$dotfiles_directory"
+		;;
+	help|-h|--help)
+		display_usage_and_exit
+		;;
+	*)
+		echo "Unknown command: $command_name" >&2
+		display_usage_and_exit
+		;;
+esac

@@ -1,0 +1,17 @@
+# Packages shared across supported Linux distributions.
+git
+curl
+wget
+zsh
+vim
+tmux
+htop
+neofetch
+ripgrep
+fzf
+unzip
+zip
+jq
+bat
+grc
+gh

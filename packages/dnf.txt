@@ -1,0 +1,5 @@
+# Fedora/RHEL-specific additions and package name differences.
+fd-find
+gcc
+gcc-c++
+make

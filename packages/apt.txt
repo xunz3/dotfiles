@@ -1,0 +1,3 @@
+# Debian/Ubuntu-specific additions and package name differences.
+fd-find
+build-essential
