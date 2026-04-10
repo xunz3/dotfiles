@@ -1,6 +1,4 @@
-# grc overides for ls
-#   Made possible through contributions from generous benefactors like
-#   `brew install coreutils`
+# shell aliases and Linux command compatibility shims
 if (( $+commands[fdfind] )) && ! (( $+commands[fd] )); then
   alias fd='fdfind'
 fi

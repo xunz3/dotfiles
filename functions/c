@@ -7,10 +7,8 @@
 #   c <tab>
 #
 # ...to autocomplete on all of your projects in the directories specified in
-# `functions/_c`. Typically I'm using it like:
+# `functions/_c`. Typically:
 #
-#    c holm<tab>/bo<tab>
-#
-# ...to quickly jump into holman/boom, for example.
+#   c my-project
 
 cd "$PROJECTS/$1"
