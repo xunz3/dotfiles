@@ -1,87 +1,169 @@
-# holman does dotfiles
+# dotfiles
 
-Your dotfiles are how you personalize your system. These are mine.
+Linux-first dotfiles for bootstrapping a new workstation quickly.
 
-I was a little tired of having long alias files and everything strewn about
-(which is extremely common on other dotfiles projects, too). That led to this
-project being much more topic-centric. I realized I could split a lot of things
-up into the main areas I used (Ruby, git, system libraries, and so on), so I
-structured the project accordingly.
+This repo manages:
 
-If you're interested in the philosophy behind why projects like these are
-awesome, you might want to [read my post on the
-subject](http://zachholman.com/2010/08/dotfiles-are-meant-to-be-forked/).
+- shell: `zsh`, `oh-my-zsh`, aliases, completions, paths
+- terminal: `tmux`
+- editors: `vim`, `neovim`
+- CLI config: `git`, `htop`, `neofetch`
+- optional toolchains: `rustup`, `nvm`, `bun`, `sdkman`
 
-## topical
+## Fresh Machine Setup
 
-Everything's built around topic areas. If you're adding a new area to your
-forked dotfiles — say, "Java" — you can simply add a `java` directory and put
-files in there. Anything with an extension of `.zsh` will get automatically
-included into your shell. Anything with an extension of `.symlink` will get
-symlinked without extension into `$HOME` when you run `script/bootstrap`.
-
-## what's inside
-
-A lot of stuff. Seriously, a lot of stuff. Check them out in the file browser
-above and see what components may mesh up with you.
-[Fork it](https://github.com/holman/dotfiles/fork), remove what you don't
-use, and build on what you do use.
-
-## components
-
-There's a few special files in the hierarchy.
-
-- **bin/**: Anything in `bin/` will get added to your `$PATH` and be made
-  available everywhere.
-- **topic/\*.zsh**: Any files ending in `.zsh` get loaded into your
-  environment.
-- **topic/path.zsh**: Any file named `path.zsh` is loaded first and is
-  expected to setup `$PATH` or similar.
-- **topic/completion.zsh**: Any file named `completion.zsh` is loaded
-  last and is expected to setup autocomplete.
-- **topic/install.sh**: Any file named `install.sh` is executed when you run `script/install`. To avoid being loaded automatically, its extension is `.sh`, not `.zsh`.
-- **topic/\*.symlink**: Any file ending in `*.symlink` gets symlinked into
-  your `$HOME`. This is so you can keep all of those versioned in your dotfiles
-  but still keep those autoloaded files in your home directory. These get
-  symlinked in when you run `script/bootstrap`.
-
-## install
-
-Run this:
+Install at least `git` and `zsh` first, then:
 
 ```sh
-git clone https://github.com/holman/dotfiles.git ~/.dotfiles
-cd ~/.dotfiles
-script/bootstrap
+git clone <your-repo-url> ~/dotfiles
+cd ~/dotfiles
+bin/dot packages
+bin/dot setup-safe
+exec zsh
 ```
 
-This will symlink the appropriate files in `.dotfiles` to your home directory.
-Everything is configured and tweaked within `~/.dotfiles`.
+`setup-safe` is the recommended first run. It backs up conflicts to `*.backup` instead of replacing them in place.
 
-The main file you'll want to change right off the bat is `zsh/zshrc.symlink`,
-which sets up a few paths that'll be different on your particular machine.
+`script/bootstrap` also creates these local-only files when they do not exist:
 
-`dot` is a simple script that installs some dependencies, sets sane macOS
-defaults, and so on. Tweak this script, and occasionally run `dot` from
-time to time to keep your environment fresh and up-to-date. You can find
-this script in `bin/`.
+- `~/.gitconfig.local` from `git/gitconfig.local.symlink.example` if it does not exist
+- `~/.localrc` from `local/localrc.example` if it does not exist
+- `~/.toolchainsrc` from `local/toolchainsrc.example` if it does not exist
 
-## bugs
+That keeps identity, secrets, proxies, and machine-specific paths out of the tracked repo.
 
-I want this to work for everyone; that means when you clone it down it should
-work for you even though you may not have `rbenv` installed, for example. That
-said, I do use this as _my_ dotfiles, so there's a good chance I may break
-something if I forget to make a check for a dependency.
+## Daily Commands
 
-If you're brand-new to the project and run into any blockers, please
-[open an issue](https://github.com/holman/dotfiles/issues) on this repository
-and I'd love to get it fixed for you!
+```sh
+bin/dot setup             # bootstrap + package install
+bin/dot setup-safe        # bootstrap with backups + package install
+bin/dot setup-enhanced    # bootstrap + enhanced packages + optional toolchains
+bin/dot bootstrap         # only manage symlinks
+bin/dot install           # only install packages and topic extras
+bin/dot install-enhanced  # install enhanced profile
+bin/dot packages          # print package list for this machine
+bin/dot packages-enhanced # print enhanced package list
+bin/dot toolchains        # run only the optional toolchain installer
+bin/dot update            # git pull + install
+bin/dot edit              # open the repo in $EDITOR
+```
 
-## thanks
+Useful bootstrap flags:
 
-I forked [Ryan Bates](http://github.com/ryanb)' excellent
-[dotfiles](http://github.com/ryanb/dotfiles) for a couple years before the
-weight of my changes and tweaks inspired me to finally roll my own. But Ryan's
-dotfiles were an easy way to get into bash customization, and then to jump ship
-to zsh a bit later. A decent amount of the code in these dotfiles stem or are
-inspired from Ryan's original project.
+```sh
+script/bootstrap --backup
+script/bootstrap --force
+script/bootstrap --skip-gitconfig
+```
+
+## Profiles
+
+`script/install` is Linux-only and does two things:
+
+1. Installs packages from `packages/common.txt` plus the current distro file.
+2. Runs each topic `install.sh`.
+
+Base install hooks:
+
+- `zsh/install.sh`: `oh-my-zsh`, `zsh-autosuggestions`, `zsh-syntax-highlighting`
+- `vim/install.sh`: `vim-plug` and Vim plugins
+- `nvim/install.sh`: installs the official Neovim release into `~/.local/opt`, links `~/.local/bin/nvim`, runs headless `Lazy sync`, and in enhanced mode `MasonToolsInstallSync`
+- `toolchains/install.sh`: optional `rustup`, `nvm`, `bun`, `sdkman`
+
+Enhanced mode adds:
+
+- `packages/common-enhanced.txt`
+- distro-specific enhanced package lists such as `packages/apt-enhanced.txt`
+- optional toolchain installation for the current run
+
+Use enhanced mode when you want a fuller workstation bootstrap:
+
+```sh
+bin/dot packages-enhanced
+bin/dot setup-enhanced
+```
+
+Toolchains stay opt-in even in enhanced mode. Edit `~/.toolchainsrc` and set the entries you want to `1`.
+
+The Neovim enhanced profile aims to cover a broad mainstream baseline:
+
+- web: JavaScript, TypeScript, React, Vue, Svelte, Astro, HTML, CSS, Tailwind, GraphQL
+- backend and systems: Python, Go, Rust, Java, PHP, Ruby, C/C++, Bash, Zig
+- infra and data: Docker, Terraform, SQL, JSON, YAML, TOML, XML, Markdown
+
+Neovim is installed from the official release tarball instead of the distro package. By default the repo pins `v0.11.5` through `nvim/install.sh`.
+
+Override it for a different version with:
+
+```sh
+DOTFILES_NEOVIM_VERSION=v0.11.5 bin/dot install
+```
+
+## Managed Config
+
+Top-level dotfiles:
+
+- `~/.zshrc`
+- `~/.zshenv`
+- `~/.gitconfig`
+- `~/.gitignore`
+- `~/.tmux.conf`
+- `~/.vimrc`
+
+XDG config:
+
+- `~/.config/nvim`
+- `~/.config/htop`
+- `~/.config/neofetch`
+
+## Repository Layout
+
+- `bin/`: entry points such as `bin/dot`
+- `*.symlink`: linked into `$HOME` as dotfiles
+- `topic/config/<app>/`: linked into `~/.config/<app>/`
+- `*.zsh`: shell modules loaded by `zsh/zshrc.symlink`
+- `topic/install.sh`: topic-specific installers
+- `packages/*.txt`: package lists by package manager
+- `local/*.example`: local-only file templates
+
+## Local-Only Settings
+
+Keep anything machine-specific outside the tracked config:
+
+- Git identity: `~/.gitconfig.local`
+- secrets and tokens: `~/.localrc`
+- toolchain install flags: `~/.toolchainsrc`
+- proxy settings: `~/.localrc`
+- custom paths such as `PROJECTS`: `~/.localrc`
+
+Examples:
+
+```sh
+export PROJECTS="$HOME/projects"
+export http_proxy="http://proxy.example:8080"
+export https_proxy="http://proxy.example:8080"
+```
+
+## Adding More Config
+
+Rules of thumb:
+
+- top-level dotfile: add `name.symlink`
+- XDG app config: add `topic/config/<app>/`
+- reusable shell logic: add a `*.zsh` file
+- one-time setup or tool bootstrap: add `topic/install.sh`
+
+Examples:
+
+- `tmux/tmux.conf.symlink` -> `~/.tmux.conf`
+- `nvim/config/nvim/` -> `~/.config/nvim/`
+- `git/gitconfig.symlink` -> `~/.gitconfig`
+
+## Notes
+
+- This repo is intended for Linux hosts.
+- Zsh uses `oh-my-zsh` with the `lambda` theme by default.
+- `EDITOR`, `VISUAL`, and `GIT_EDITOR` prefer `nvim`.
+- `PROJECTS` defaults to `$HOME/projects`, then falls back to `$HOME/Code`.
+- Cargo is loaded from `~/.cargo/env` through `~/.zshenv` when available.
+- The repo can live anywhere; bootstrap refreshes `~/.dotfiles` as a symlink to the real path.
