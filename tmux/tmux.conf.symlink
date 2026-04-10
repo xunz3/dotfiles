@@ -1,0 +1,79 @@
+##### Basic settings #####
+
+unbind C-b
+set -g prefix C-a
+bind C-a send-prefix
+
+set -s escape-time 0
+set -g mouse on
+set -g focus-events on
+set -g base-index 1
+setw -g pane-base-index 1
+set -g renumber-windows on
+set -g allow-rename off
+set -g set-clipboard on
+set -g default-terminal "screen-256color"
+set -as terminal-overrides ",xterm-256color:RGB"
+
+##### Splits #####
+
+bind | split-window -hc "#{pane_current_path}"
+bind - split-window -vc "#{pane_current_path}"
+
+unbind '"'
+unbind %
+
+##### Pane navigation #####
+
+bind h select-pane -L
+bind j select-pane -D
+bind k select-pane -U
+bind l select-pane -R
+
+##### Pane resizing #####
+
+bind -r H resize-pane -L 5
+bind -r J resize-pane -D 5
+bind -r K resize-pane -U 5
+bind -r L resize-pane -R 5
+
+##### Window management #####
+
+bind c new-window -c "#{pane_current_path}"
+bind x kill-pane
+bind , command-prompt "rename-window %%"
+bind Tab last-window
+bind Space next-layout
+bind m setw synchronize-panes \; display-message "synchronize-panes toggled"
+bind -n M-Left previous-window
+bind -n M-Right next-window
+
+##### Copy mode #####
+
+setw -g mode-keys vi
+bind Enter copy-mode
+bind-key -T copy-mode-vi v send -X begin-selection
+bind-key -T copy-mode-vi Enter send -X copy-selection-and-cancel
+bind-key -T copy-mode-vi y send -X copy-selection-and-cancel
+if-shell 'command -v wl-copy >/dev/null 2>&1' 'bind-key -T copy-mode-vi y send -X copy-pipe-and-cancel "wl-copy"'
+if-shell 'command -v xclip >/dev/null 2>&1' 'bind-key -T copy-mode-vi y send -X copy-pipe-and-cancel "xclip -selection clipboard -in"'
+if-shell 'command -v pbcopy >/dev/null 2>&1' 'bind-key -T copy-mode-vi y send -X copy-pipe-and-cancel "pbcopy"'
+
+##### History and status #####
+
+set -g history-limit 100000
+set -g status-interval 1
+set -g status-style bg=colour235,fg=colour252
+set -g pane-border-style fg=colour238
+set -g pane-active-border-style fg=colour81
+set -g message-style bg=colour24,fg=colour231
+set -g status-left-length 24
+set -g status-right-length 64
+set -g status-left "#[bold] #S "
+set -g window-status-format " #I:#W "
+set -g window-status-current-format "#[bold,fg=colour81] #I:#W "
+set -g status-right "#{?window_zoomed_flag,#[fg=colour81]ZOOM #[default],}#{?pane_in_mode,#[fg=colour214]COPY #[default],}%Y-%m-%d %H:%M"
+
+##### Reload #####
+
+bind r source-file ~/.tmux.conf \; display-message "Config reloaded!"
