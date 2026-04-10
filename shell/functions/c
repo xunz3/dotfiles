@@ -7,7 +7,7 @@
 #   c <tab>
 #
 # ...to autocomplete on all of your projects in the directories specified in
-# `functions/_c`. Typically:
+# `shell/functions/_c`. Typically:
 #
 #   c my-project
 

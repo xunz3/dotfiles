@@ -121,7 +121,10 @@ XDG config:
 - `bin/`: entry points such as `bin/dot`
 - `*.symlink`: linked into `$HOME` as dotfiles
 - `topic/config/<app>/`: linked into `~/.config/<app>/`
-- `*.zsh`: shell modules loaded by `zsh/zshrc.symlink`
+- `shell/core/`: shared shell environment, aliases, path, keys, toolchains
+- `shell/apps/`: app-specific shell modules such as git and docker
+- `shell/functions/`: autoloaded shell functions and completion helpers
+- `zsh/`: zsh entrypoints, prompt, window behavior, and installer
 - `topic/install.sh`: topic-specific installers
 - `packages/*.txt`: package lists by package manager
 - `local/*.example`: local-only file templates
@@ -158,6 +161,7 @@ Examples:
 - `tmux/tmux.conf.symlink` -> `~/.tmux.conf`
 - `nvim/config/nvim/` -> `~/.config/nvim/`
 - `git/gitconfig.symlink` -> `~/.gitconfig`
+- `shell/core/env.zsh` -> loaded by `zsh/zshrc.symlink`
 
 ## Notes
 
