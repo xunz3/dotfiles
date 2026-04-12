@@ -82,16 +82,16 @@ Toolchain mode adds:
 - `packages/common-toolchains.txt`
 - distro-specific toolchain package lists such as `packages/apt-toolchains.txt`
 - Neovim Mason language tools
-- optional toolchain installation for the current run
+- optional runtime managers for the current run
 
-Run it separately from setup when you want a fuller development workstation:
+`bin/dot toolchains` is a convenience entry point for `bin/dot install --toolchains`. Run it separately from setup when you want a fuller development workstation:
 
 ```sh
 bin/dot packages --toolchains
 bin/dot toolchains
 ```
 
-Runtime managers stay opt-in even in toolchain mode. Edit `~/.toolchainsrc` and set the entries you want to `1`.
+Runtime managers stay opt-in even in toolchain mode. Edit `~/.toolchainsrc` and set the entries you want to `1`. Use `bin/dot toolchains --runtimes` when you only want those runtime managers, without package installation or Neovim Mason tools.
 
 The Neovim toolchain profile aims to cover a broad mainstream baseline:
 

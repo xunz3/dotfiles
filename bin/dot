@@ -24,7 +24,7 @@ Commands:
 	install     Install packages and run topic installers
 	packages    Print the resolved package list for this machine
 	ssh         Initialize ~/.ssh permissions and baseline config
-	toolchains  Install or inspect toolchain profile
+	toolchains  Install or inspect the toolchain profile
 	update      Pull latest changes then run install
 	edit        Open the dotfiles directory in $EDITOR
 	help        Show this help message
