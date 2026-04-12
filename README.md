@@ -138,6 +138,7 @@ Keep anything machine-specific outside the tracked config:
 - toolchain install flags: `~/.toolchainsrc`
 - proxy settings: `~/.localrc`
 - custom paths such as `PROJECTS`: `~/.localrc`
+- machine-specific shell hooks, such as local proxy controllers: `~/.localrc`
 
 Examples:
 
@@ -145,6 +146,7 @@ Examples:
 export PROJECTS="$HOME/projects"
 export http_proxy="http://proxy.example:8080"
 export https_proxy="http://proxy.example:8080"
+[[ -r "$HOME/path/to/local/tool.sh" ]] && source "$HOME/path/to/local/tool.sh"
 ```
 
 ## Adding More Config
@@ -153,7 +155,7 @@ Rules of thumb:
 
 - top-level dotfile: add `name.symlink`
 - XDG app config: add `topic/config/<app>/`
-- reusable shell logic: add a `*.zsh` file
+- reusable shell logic: add a `*.zsh` file under `shell/core/` or `shell/apps/<tool>/`
 - one-time setup or tool bootstrap: add `topic/install.sh`
 
 Examples:

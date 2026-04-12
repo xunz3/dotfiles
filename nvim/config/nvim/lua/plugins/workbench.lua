@@ -193,12 +193,14 @@ return {
       },
       exclude = {
         filetypes = {
-          "NvimTree",
+          "neo-tree",
+          "neo-tree-popup",
           "Trouble",
           "alpha",
           "help",
           "lazy",
           "mason",
+          "oil",
           "qf",
           "toggleterm",
         },

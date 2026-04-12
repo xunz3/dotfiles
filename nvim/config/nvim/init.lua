@@ -2,7 +2,7 @@ if vim.loader then
   vim.loader.enable()
 end
 
--- nvim-tree recommends disabling netrw before plugin setup.
+-- External file explorers handle directory buffers; keep netrw out of the way.
 vim.g.loaded_netrw = 1
 vim.g.loaded_netrwPlugin = 1
 

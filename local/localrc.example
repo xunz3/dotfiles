@@ -5,3 +5,8 @@
 # export http_proxy="http://proxy.example:8080"
 # export https_proxy="http://proxy.example:8080"
 # export OPENAI_API_KEY=""
+
+# Local shell hooks are allowed here when they are machine-specific.
+# if [[ -r "$HOME/path/to/local/tool.sh" ]]; then
+#   source "$HOME/path/to/local/tool.sh"
+# fi

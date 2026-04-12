@@ -1,4 +1,7 @@
 # shell aliases and Linux command compatibility shims
+alias reload!='. ~/.zshrc'
+alias cls='clear'
+
 if (( $+commands[fdfind] )) && ! (( $+commands[fd] )); then
   alias fd='fdfind'
 fi

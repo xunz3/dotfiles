@@ -1,10 +1,12 @@
 local hidden_filetypes = {
   aerial = true,
-  NvimTree = true,
+  ["neo-tree"] = true,
+  ["neo-tree-popup"] = true,
   Trouble = true,
   help = true,
   lazy = true,
   mason = true,
+  oil = true,
   qf = true,
   trouble = true,
   toggleterm = true,

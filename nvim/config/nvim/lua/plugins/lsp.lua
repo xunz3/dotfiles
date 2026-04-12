@@ -167,7 +167,6 @@ return {
   },
   {
     "neovim/nvim-lspconfig",
-    tag = "v1.8.0",
     event = { "BufReadPre", "BufNewFile" },
     dependencies = {
       "hrsh7th/cmp-nvim-lsp",
@@ -195,9 +194,9 @@ return {
         astro = { "prettierd", "prettier", stop_after_first = true },
         c = { "clang_format" },
         cpp = { "clang_format" },
-        css = { "prettierd", "prettier", stop_after_first = true },
+        css = { "biome", "prettierd", "prettier", stop_after_first = true },
         go = { "gofumpt", "goimports" },
-        graphql = { "prettierd", "prettier", stop_after_first = true },
+        graphql = { "biome", "prettierd", "prettier", stop_after_first = true },
         html = { "prettierd", "prettier", stop_after_first = true },
         javascript = { "biome", "prettierd", "prettier", stop_after_first = true },
         javascriptreact = { "biome", "prettierd", "prettier", stop_after_first = true },

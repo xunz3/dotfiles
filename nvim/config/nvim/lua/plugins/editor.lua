@@ -1,55 +1,59 @@
 return {
   {
-    "nvim-tree/nvim-tree.lua",
-    cmd = { "NvimTreeToggle", "NvimTreeFocus" },
+    "folke/flash.nvim",
+    event = "VeryLazy",
+    opts = {},
     keys = {
-      { "<leader>e", "<cmd>NvimTreeToggle<cr>", desc = "Toggle file tree" },
-      { "<leader>o", "<cmd>NvimTreeFocus<cr>", desc = "Focus file tree" },
+      {
+        "s",
+        mode = { "n", "x", "o" },
+        function()
+          require("flash").jump()
+        end,
+        desc = "Flash",
+      },
+      {
+        "S",
+        mode = { "n", "x", "o" },
+        function()
+          require("flash").treesitter()
+        end,
+        desc = "Flash treesitter",
+      },
+      {
+        "r",
+        mode = "o",
+        function()
+          require("flash").remote()
+        end,
+        desc = "Remote flash",
+      },
+      {
+        "R",
+        mode = { "o", "x" },
+        function()
+          require("flash").treesitter_search()
+        end,
+        desc = "Treesitter search",
+      },
+      {
+        "<C-s>",
+        mode = { "c" },
+        function()
+          require("flash").toggle()
+        end,
+        desc = "Toggle flash search",
+      },
     },
-    dependencies = {
-      "nvim-tree/nvim-web-devicons",
-    },
+  },
+  {
+    "nvim-mini/mini.ai",
+    event = "VeryLazy",
     opts = {
-      sort = {
-        sorter = "case_sensitive",
-      },
-      hijack_cursor = true,
-      sync_root_with_cwd = true,
-      update_focused_file = {
-        enable = true,
-        update_root = true,
-      },
-      view = {
-        side = "left",
-        width = 32,
-        preserve_window_proportions = true,
-      },
-      renderer = {
-        group_empty = true,
-        highlight_git = true,
-        root_folder_label = false,
-        indent_markers = {
-          enable = true,
-        },
-      },
-      diagnostics = {
-        enable = true,
-        show_on_dirs = true,
-      },
-      filters = {
-        dotfiles = false,
-      },
-      actions = {
-        open_file = {
-          quit_on_open = false,
-          window_picker = {
-            enable = false,
-          },
-        },
-      },
+      n_lines = 500,
     },
     config = function(_, opts)
-      require("nvim-tree").setup(opts)
+      require("mini.ai").setup(opts)
     end,
   },
   {
@@ -60,50 +64,6 @@ return {
     "windwp/nvim-ts-autotag",
     event = { "BufReadPost", "BufNewFile" },
     opts = {},
-  },
-  {
-    "nvim-telescope/telescope.nvim",
-    branch = "0.1.x",
-    cmd = "Telescope",
-    keys = {
-      { "<leader>ff", "<cmd>Telescope find_files<cr>", desc = "Find files" },
-      { "<leader>fg", "<cmd>Telescope live_grep<cr>", desc = "Search text" },
-      { "<leader>fb", "<cmd>Telescope buffers<cr>", desc = "Find buffers" },
-      { "<leader>fh", "<cmd>Telescope help_tags<cr>", desc = "Help tags" },
-    },
-    dependencies = {
-      "nvim-lua/plenary.nvim",
-    },
-    opts = function()
-      local actions = require("telescope.actions")
-
-      return {
-        defaults = {
-          layout_strategy = "horizontal",
-          sorting_strategy = "ascending",
-          path_display = { "smart" },
-          file_ignore_patterns = {
-            "node_modules",
-            ".git/",
-            "dist/",
-            "build/",
-          },
-          layout_config = {
-            prompt_position = "top",
-          },
-          mappings = {
-            i = {
-              ["<Esc>"] = actions.close,
-            },
-          },
-        },
-        pickers = {
-          find_files = {
-            hidden = true,
-          },
-        },
-      }
-    end,
   },
   {
     "nvim-treesitter/nvim-treesitter",
@@ -121,27 +81,23 @@ return {
           "css",
           "diff",
           "dockerfile",
-          "git_config",
-          "gitcommit",
-          "gitignore",
           "go",
           "gomod",
           "gosum",
-          "gotmpl",
           "graphql",
           "html",
           "java",
           "javascript",
-          "jsdoc",
           "json",
           "jsonc",
           "lua",
           "luadoc",
+          "luap",
           "markdown",
           "markdown_inline",
           "python",
-          "query",
           "regex",
+          "ruby",
           "rust",
           "scss",
           "sql",
@@ -155,23 +111,15 @@ return {
           "xml",
           "yaml",
         },
-        auto_install = false,
-        highlight = {
-          enable = true,
-        },
-        indent = {
-          enable = true,
-        },
-        autotag = {
-          enable = true,
-        },
+        highlight = { enable = true },
+        indent = { enable = true },
         incremental_selection = {
           enable = true,
           keymaps = {
-            init_selection = "gnn",
-            node_incremental = "grn",
-            scope_incremental = "grc",
-            node_decremental = "grm",
+            init_selection = "<CR>",
+            node_incremental = "<CR>",
+            scope_incremental = "<S-CR>",
+            node_decremental = "<BS>",
           },
         },
       })
@@ -184,26 +132,19 @@ return {
   },
   {
     "tpope/vim-fugitive",
-    cmd = {
-      "Git",
-      "GBlame",
-      "Gdiffsplit",
-      "Gvdiffsplit",
-      "Gwrite",
-    },
+    cmd = { "Git", "G", "Gdiffsplit", "Gvdiffsplit", "Gwrite", "Gread", "Ggrep", "GMove", "GRename", "GDelete" },
   },
   {
     "windwp/nvim-autopairs",
     event = "InsertEnter",
-    opts = {
-      check_ts = true,
-    },
+    opts = {},
     config = function(_, opts)
       require("nvim-autopairs").setup(opts)
     end,
   },
   {
     "kylechui/nvim-surround",
+    version = "*",
     event = "VeryLazy",
     opts = {},
   },

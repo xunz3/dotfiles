@@ -18,7 +18,6 @@ map("n", "<C-l>", "<C-w>l", { desc = "Go to right window" })
 
 map("n", "<S-h>", "<cmd>bprevious<cr>", { desc = "Previous buffer" })
 map("n", "<S-l>", "<cmd>bnext<cr>", { desc = "Next buffer" })
-map("n", "<leader>bd", "<cmd>bdelete<cr>", { desc = "Delete buffer" })
 map("n", "<leader>bn", "<cmd>enew<cr>", { desc = "New buffer" })
 
 map("n", "J", "mzJ`z", { desc = "Join lines" })
