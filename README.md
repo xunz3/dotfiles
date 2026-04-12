@@ -77,6 +77,8 @@ Base install hooks:
 - `ssh/install.sh`: initializes `~/.ssh` permissions and a baseline client config
 - `toolchains/install.sh`: optional `rustup`, `nvm`, `bun`, `sdkman`
 
+Topic installers run in this order: `ssh`, `zsh`, `vim`, `nvim`, then `toolchains`. A failed topic installer is reported but does not prevent the remaining topics from running.
+
 Toolchain mode adds:
 
 - `packages/common-toolchains.txt`

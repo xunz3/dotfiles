@@ -174,14 +174,46 @@ install_linux_packages () {
 	success "$manager packages installed"
 }
 
+run_topic_installer () {
+	local installer=$1
+	local label="${installer#"$DOTFILES_ROOT/"}"
+
+	info "running $label"
+	if "$installer"
+	then
+		return 0
+	fi
+
+	info "$label failed; continuing with remaining installers"
+}
+
+is_ordered_topic_installer () {
+	case "${1#"$DOTFILES_ROOT/"}" in
+		ssh/install.sh|zsh/install.sh|vim/install.sh|nvim/install.sh|toolchains/install.sh)
+			return 0
+			;;
+		*)
+			return 1
+			;;
+	esac
+}
+
 run_topic_installers () {
+	local installer topic
+
 	export DOTFILES_INSTALL_TOOLCHAINS="$install_toolchains"
+
+	for topic in ssh zsh vim nvim toolchains
+	do
+		installer="$DOTFILES_ROOT/$topic/install.sh"
+		[[ -f "$installer" ]] && run_topic_installer "$installer"
+	done
 
 	while IFS= read -r -d '' installer
 	do
-		info "running ${installer#"$DOTFILES_ROOT/"}"
-		"$installer"
-	done < <(find "$DOTFILES_ROOT" -mindepth 2 -maxdepth 2 -name install.sh -print0)
+		is_ordered_topic_installer "$installer" && continue
+		run_topic_installer "$installer"
+	done < <(find "$DOTFILES_ROOT" -mindepth 2 -maxdepth 2 -name install.sh -print0 | sort -z)
 }
 
 while [[ $# -gt 0 ]]

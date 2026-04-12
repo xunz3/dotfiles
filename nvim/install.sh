@@ -12,6 +12,18 @@ success () {
 	printf "\r\033[2K  [ \033[00;32mOK\033[0m ] %s\n" "$1"
 }
 
+run_with_timeout () {
+	local seconds=$1
+	shift
+
+	if command -v timeout >/dev/null 2>&1
+	then
+		timeout "$seconds" "$@"
+	else
+		"$@"
+	fi
+}
+
 install_neovim () {
 	local os arch asset version version_name install_root install_dir current_link tmp_dir url archive extracted_dir
 
@@ -92,7 +104,7 @@ then
 fi
 
 info 'syncing Neovim plugins'
-if "$NVIM_BIN" --headless "+Lazy! sync" +qa >/dev/null 2>&1
+if run_with_timeout "${DOTFILES_NVIM_PLUGIN_TIMEOUT:-300}" "$NVIM_BIN" --headless "+Lazy! sync" +qa >/dev/null 2>&1
 then
 	success 'synced Neovim plugins'
 else
@@ -105,7 +117,7 @@ then
 fi
 
 info 'installing Mason language tools for the toolchain profile'
-if "$NVIM_BIN" --headless "+MasonToolsInstallSync" +qa >/dev/null 2>&1
+if run_with_timeout "${DOTFILES_MASON_TOOL_TIMEOUT:-600}" "$NVIM_BIN" --headless "+MasonToolsInstallSync" +qa >/dev/null 2>&1
 then
 	success 'installed Mason language tools'
 else

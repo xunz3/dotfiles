@@ -31,8 +31,12 @@ clone_repo_if_missing () {
 
 	mkdir -p "$(dirname "$target_dir")"
 	info "cloning $label"
-	git clone --depth=1 "$repo_url" "$target_dir"
-	success "installed $label"
+	if git clone --depth=1 "$repo_url" "$target_dir"
+	then
+		success "installed $label"
+	else
+		info "failed to install $label; run zsh/install.sh again after network is available"
+	fi
 }
 
 if ! command -v git >/dev/null 2>&1
