@@ -8,6 +8,7 @@ cd "$(dirname "$0")/.."
 DOTFILES_ROOT=$(pwd -P)
 print_only=false
 install_toolchains="${DOTFILES_INSTALL_TOOLCHAINS:-0}"
+skip_packages="${DOTFILES_SKIP_PACKAGES:-0}"
 
 info () {
 	printf "\r  [ \033[00;34m..\033[0m ] %s\n" "$1"
@@ -28,6 +29,7 @@ Usage: script/install [options]
 
 Options:
   --print, --list   print the package list for the current machine
+  --user           skip system package installation
   --toolchains     include toolchain package lists and toolchain installers
   -h, --help        show this help text
 EOF
@@ -35,6 +37,15 @@ EOF
 
 have_command () {
 	command -v "$1" >/dev/null 2>&1
+}
+
+have_privilege () {
+	if [[ "${EUID}" -eq 0 ]]
+	then
+		return 0
+	fi
+
+	have_command sudo && sudo -n true >/dev/null 2>&1
 }
 
 run_as_root () {
@@ -126,9 +137,15 @@ install_linux_packages () {
 		return
 	fi
 
-	if [[ "${DOTFILES_SKIP_PACKAGES:-0}" == "1" ]]
+	if [[ "$skip_packages" == "1" ]]
 	then
-		info 'skipping package installation because DOTFILES_SKIP_PACKAGES=1'
+		info 'skipping package installation for user-only mode'
+		return
+	fi
+
+	if ! have_privilege
+	then
+		info 'no root or passwordless sudo access; skipping system packages'
 		return
 	fi
 
@@ -172,6 +189,9 @@ do
 	case "$1" in
 		--print|--list)
 			print_only=true
+			;;
+		--user)
+			skip_packages=1
 			;;
 		--toolchains)
 			install_toolchains=1

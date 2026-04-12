@@ -21,8 +21,10 @@ Usage:
 Commands:
 	setup       Run bootstrap then install packages
 	setup-safe  Back up conflicting dotfiles, then install packages
+	setup-user  Bootstrap and skip system package installation
 	bootstrap   Symlink dotfiles into $HOME
 	install     Install packages and run topic installers
+	install-user Install topic extras and skip system package installation
 	packages    Print the resolved package list for this machine
 	ssh         Initialize ~/.ssh permissions and baseline config
 	toolchains  Install toolchain packages, language tools, and optional runtimes
@@ -60,6 +62,10 @@ run_install() {
 	"$dotfiles_directory/script/install" "$@"
 }
 
+run_user_install() {
+	run_install --user "$@"
+}
+
 run_toolchains() {
 	run_install --toolchains "$@"
 }
@@ -95,11 +101,18 @@ case "$command_name" in
 		run_bootstrap --backup "$@"
 		run_install
 		;;
+	setup-user)
+		run_bootstrap "$@"
+		run_user_install
+		;;
 	bootstrap)
 		run_bootstrap "$@"
 		;;
 	install)
 		run_install "$@"
+		;;
+	install-user)
+		run_user_install "$@"
 		;;
 	packages)
 		run_install --print "$@"

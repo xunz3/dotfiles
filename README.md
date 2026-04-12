@@ -37,8 +37,10 @@ That keeps identity, secrets, proxies, and machine-specific paths out of the tra
 ```sh
 bin/dot setup             # bootstrap + package install
 bin/dot setup-safe        # bootstrap with backups + package install
+bin/dot setup-user        # bootstrap and skip system packages
 bin/dot bootstrap         # only manage symlinks
 bin/dot install           # only install packages and topic extras
+bin/dot install-user      # install topic extras and skip system packages
 bin/dot packages          # print package list for this machine
 bin/dot ssh               # initialize ~/.ssh permissions and baseline config
 bin/dot toolchains        # install toolchain packages, language tools, and optional runtimes
@@ -62,6 +64,8 @@ script/bootstrap --skip-gitconfig
 
 1. Installs packages from `packages/common.txt` plus the current distro file.
 2. Runs each topic `install.sh`.
+
+If the current user is not root and does not have passwordless `sudo`, system packages are skipped automatically. Use `bin/dot setup-user` or `bin/dot install-user` when you explicitly want user-only setup.
 
 Base install hooks:
 
