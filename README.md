@@ -67,7 +67,7 @@ script/bootstrap --skip-gitconfig
 1. Installs packages from `packages/common.txt` plus the current distro file.
 2. Runs each topic `install.sh`.
 
-If the current user is not root and does not have passwordless `sudo`, system packages are skipped automatically. Use `bin/dot setup --user` or `bin/dot install --user` when you explicitly want user-only setup.
+By default, package installation uses the system package manager through `sudo` when needed. Use `bin/dot setup --user` or `bin/dot install --user` when you explicitly want to skip system packages.
 
 Base install hooks:
 

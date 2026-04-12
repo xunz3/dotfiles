@@ -8,7 +8,7 @@ cd "$(dirname "$0")/.."
 DOTFILES_ROOT=$(pwd -P)
 print_only=false
 install_toolchains="${DOTFILES_INSTALL_TOOLCHAINS:-0}"
-skip_packages="${DOTFILES_SKIP_PACKAGES:-0}"
+skip_packages=0
 
 info () {
 	printf "\r  [ \033[00;34m..\033[0m ] %s\n" "$1"
@@ -37,15 +37,6 @@ EOF
 
 have_command () {
 	command -v "$1" >/dev/null 2>&1
-}
-
-have_privilege () {
-	if [[ "${EUID}" -eq 0 ]]
-	then
-		return 0
-	fi
-
-	have_command sudo && sudo -n true >/dev/null 2>&1
 }
 
 run_as_root () {
@@ -140,12 +131,6 @@ install_linux_packages () {
 	if [[ "$skip_packages" == "1" ]]
 	then
 		info 'skipping package installation for user-only mode'
-		return
-	fi
-
-	if ! have_privilege
-	then
-		info 'no root or passwordless sudo access; skipping system packages'
 		return
 	fi
 
