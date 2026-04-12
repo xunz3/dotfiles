@@ -12,17 +12,6 @@ success () {
 	printf "\r\033[2K  [ \033[00;32mOK\033[0m ] %s\n" "$1"
 }
 
-run_with_timeout () {
-	local seconds="${DOTFILES_VIM_PLUGIN_TIMEOUT:-180}"
-
-	if command -v timeout >/dev/null 2>&1
-	then
-		timeout "$seconds" "$@"
-	else
-		"$@"
-	fi
-}
-
 if ! command -v curl >/dev/null 2>&1
 then
 	info 'curl is required to install vim-plug; skipping'
@@ -48,9 +37,5 @@ then
 fi
 
 info 'installing Vim plugins'
-if run_with_timeout vim -E -s +'PlugInstall --sync' +qall
-then
-	success 'installed Vim plugins'
-else
-	info 'Vim plugin installation failed or timed out; run :PlugInstall manually after network is available'
-fi
+vim -E -s +'PlugInstall --sync' +qall
+success 'installed Vim plugins'
