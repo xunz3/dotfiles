@@ -10,6 +10,8 @@ parent_directory="$(cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd -P)"
 dotfiles_directory="$(cd "$( dirname "$parent_directory" )" && pwd -P)"
 
 display_usage_and_exit() {
+	local exit_code="${1:-0}"
+
 	cat <<'EOF'
 dot -- dotfiles management
 
@@ -19,18 +21,18 @@ Usage:
 Commands:
 	setup       Run bootstrap then install packages
 	setup-safe  Back up conflicting dotfiles, then install packages
-	setup-enhanced Run bootstrap, packages, and optional toolchains
 	bootstrap   Symlink dotfiles into $HOME
 	install     Install packages and run topic installers
-	install-enhanced Install packages, topic installers, and optional toolchains
 	packages    Print the resolved package list for this machine
-	packages-enhanced Print the enhanced package list for this machine
-	toolchains  Run only the optional toolchain installer
+	ssh         Initialize ~/.ssh permissions and baseline config
+	toolchains  Install toolchain packages, language tools, and optional runtimes
+	toolchains-packages Print the toolchain package list for this machine
+	toolchains-runtimes Run only optional runtime installers
 	update      Pull latest changes then run install
 	edit        Open the dotfiles directory in $EDITOR
 	help        Show this help message
 EOF
-	exit 0
+	exit "$exit_code"
 }
 
 require_editor() {
@@ -59,7 +61,19 @@ run_install() {
 }
 
 run_toolchains() {
-	DOTFILES_INSTALL_TOOLCHAINS=1 "$dotfiles_directory/toolchains/install.sh"
+	run_install --toolchains "$@"
+}
+
+run_toolchains_packages() {
+	run_install --print --toolchains "$@"
+}
+
+run_toolchains_runtimes() {
+	DOTFILES_INSTALL_TOOLCHAINS=1 "$dotfiles_directory/toolchains/install.sh" "$@"
+}
+
+run_ssh() {
+	"$dotfiles_directory/ssh/install.sh" "$@"
 }
 
 pull_latest() {
@@ -81,27 +95,26 @@ case "$command_name" in
 		run_bootstrap --backup "$@"
 		run_install
 		;;
-	setup-enhanced)
-		run_bootstrap --backup "$@"
-		run_install --enhanced --toolchains
-		;;
 	bootstrap)
 		run_bootstrap "$@"
 		;;
 	install)
 		run_install "$@"
 		;;
-	install-enhanced)
-		run_install --enhanced --toolchains "$@"
-		;;
 	packages)
 		run_install --print "$@"
 		;;
-	packages-enhanced)
-		run_install --print --enhanced "$@"
+	ssh)
+		run_ssh "$@"
 		;;
 	toolchains)
-		run_toolchains
+		run_toolchains "$@"
+		;;
+	toolchains-packages)
+		run_toolchains_packages "$@"
+		;;
+	toolchains-runtimes)
+		run_toolchains_runtimes "$@"
 		;;
 	update)
 		pull_latest
@@ -116,6 +129,6 @@ case "$command_name" in
 		;;
 	*)
 		echo "Unknown command: $command_name" >&2
-		display_usage_and_exit
+		display_usage_and_exit 1
 		;;
 esac

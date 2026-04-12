@@ -2,9 +2,8 @@
 # This file is copied to ~/.toolchainsrc on first bootstrap if it does not exist.
 #
 # Set the toolchains you want to install during:
-#   bin/dot install-enhanced
-#   bin/dot setup-enhanced
 #   bin/dot toolchains
+#   bin/dot toolchains-runtimes
 
 export DOTFILES_INSTALL_RUSTUP=0
 export DOTFILES_INSTALL_NVM=0

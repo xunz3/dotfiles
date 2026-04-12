@@ -7,7 +7,6 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 DOTFILES_ROOT=$(pwd -P)
 print_only=false
-install_profile="${DOTFILES_INSTALL_PROFILE:-base}"
 install_toolchains="${DOTFILES_INSTALL_TOOLCHAINS:-0}"
 
 info () {
@@ -29,8 +28,7 @@ Usage: script/install [options]
 
 Options:
   --print, --list   print the package list for the current machine
-  --enhanced       include enhanced package lists and optional toolchains
-  --toolchains     enable the optional toolchain installer for this run
+  --toolchains     include toolchain package lists and toolchain installers
   -h, --help        show this help text
 EOF
 }
@@ -83,10 +81,10 @@ resolve_packages () {
 	{
 		read_package_file "$DOTFILES_ROOT/packages/common.txt"
 		read_package_file "$DOTFILES_ROOT/packages/${manager}.txt"
-		if [[ "$install_profile" == "enhanced" ]]
+		if [[ "$install_toolchains" == "1" ]]
 		then
-			read_package_file "$DOTFILES_ROOT/packages/common-enhanced.txt"
-			read_package_file "$DOTFILES_ROOT/packages/${manager}-enhanced.txt"
+			read_package_file "$DOTFILES_ROOT/packages/common-toolchains.txt"
+			read_package_file "$DOTFILES_ROOT/packages/${manager}-toolchains.txt"
 		fi
 	} | awk '!seen[$0]++'
 }
@@ -95,8 +93,14 @@ print_packages () {
 	local manager=$1
 	shift
 
+	local profile='base'
+	if [[ "$install_toolchains" == "1" ]]
+	then
+		profile='toolchains'
+	fi
+
 	printf 'package manager: %s\n' "$manager"
-	printf 'profile: %s\n' "$install_profile"
+	printf 'profile: %s\n' "$profile"
 
 	if [[ $# -eq 0 ]]
 	then
@@ -154,7 +158,6 @@ install_linux_packages () {
 }
 
 run_topic_installers () {
-	export DOTFILES_INSTALL_PROFILE="$install_profile"
 	export DOTFILES_INSTALL_TOOLCHAINS="$install_toolchains"
 
 	while IFS= read -r -d '' installer
@@ -169,10 +172,6 @@ do
 	case "$1" in
 		--print|--list)
 			print_only=true
-			;;
-		--enhanced)
-			install_profile="enhanced"
-			install_toolchains=1
 			;;
 		--toolchains)
 			install_toolchains=1

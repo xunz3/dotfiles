@@ -37,13 +37,13 @@ That keeps identity, secrets, proxies, and machine-specific paths out of the tra
 ```sh
 bin/dot setup             # bootstrap + package install
 bin/dot setup-safe        # bootstrap with backups + package install
-bin/dot setup-enhanced    # bootstrap + enhanced packages + optional toolchains
 bin/dot bootstrap         # only manage symlinks
 bin/dot install           # only install packages and topic extras
-bin/dot install-enhanced  # install enhanced profile
 bin/dot packages          # print package list for this machine
-bin/dot packages-enhanced # print enhanced package list
-bin/dot toolchains        # run only the optional toolchain installer
+bin/dot ssh               # initialize ~/.ssh permissions and baseline config
+bin/dot toolchains        # install toolchain packages, language tools, and optional runtimes
+bin/dot toolchains-packages # print toolchain package list
+bin/dot toolchains-runtimes # run only optional runtime installers
 bin/dot update            # git pull + install
 bin/dot edit              # open the repo in $EDITOR
 ```
@@ -67,25 +67,27 @@ Base install hooks:
 
 - `zsh/install.sh`: `oh-my-zsh`, `zsh-autosuggestions`, `zsh-syntax-highlighting`
 - `vim/install.sh`: `vim-plug` and Vim plugins
-- `nvim/install.sh`: installs the official Neovim release into `~/.local/opt`, links `~/.local/bin/nvim`, runs headless `Lazy sync`, and in enhanced mode `MasonToolsInstallSync`
+- `nvim/install.sh`: installs the official Neovim release into `~/.local/opt`, links `~/.local/bin/nvim`, runs headless `Lazy sync`, and in toolchain mode `MasonToolsInstallSync`
+- `ssh/install.sh`: initializes `~/.ssh` permissions and a baseline client config
 - `toolchains/install.sh`: optional `rustup`, `nvm`, `bun`, `sdkman`
 
-Enhanced mode adds:
+Toolchain mode adds:
 
-- `packages/common-enhanced.txt`
-- distro-specific enhanced package lists such as `packages/apt-enhanced.txt`
+- `packages/common-toolchains.txt`
+- distro-specific toolchain package lists such as `packages/apt-toolchains.txt`
+- Neovim Mason language tools
 - optional toolchain installation for the current run
 
-Use enhanced mode when you want a fuller workstation bootstrap:
+Run it separately from setup when you want a fuller development workstation:
 
 ```sh
-bin/dot packages-enhanced
-bin/dot setup-enhanced
+bin/dot toolchains-packages
+bin/dot toolchains
 ```
 
-Toolchains stay opt-in even in enhanced mode. Edit `~/.toolchainsrc` and set the entries you want to `1`.
+Runtime managers stay opt-in even in toolchain mode. Edit `~/.toolchainsrc` and set the entries you want to `1`.
 
-The Neovim enhanced profile aims to cover a broad mainstream baseline:
+The Neovim toolchain profile aims to cover a broad mainstream baseline:
 
 - web: JavaScript, TypeScript, React, Vue, Svelte, Astro, HTML, CSS, Tailwind, GraphQL
 - backend and systems: Python, Go, Rust, Java, PHP, Ruby, C/C++, Bash, Zig

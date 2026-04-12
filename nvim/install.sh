@@ -99,12 +99,12 @@ else
 	info 'Neovim plugin sync failed; run :Lazy sync manually after network and git are available'
 fi
 
-if [[ "${DOTFILES_INSTALL_PROFILE:-base}" != "enhanced" ]]
+if [[ "${DOTFILES_INSTALL_TOOLCHAINS:-0}" != "1" ]]
 then
 	exit 0
 fi
 
-info 'installing Mason language tools for the enhanced profile'
+info 'installing Mason language tools for the toolchain profile'
 if "$NVIM_BIN" --headless "+MasonToolsInstallSync" +qa >/dev/null 2>&1
 then
 	success 'installed Mason language tools'

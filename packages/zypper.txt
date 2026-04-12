@@ -3,3 +3,4 @@ fd
 gcc
 gcc-c++
 make
+openssh
