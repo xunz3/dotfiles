@@ -18,11 +18,11 @@ Install at least `git` and `zsh` first, then:
 git clone <your-repo-url> ~/dotfiles
 cd ~/dotfiles
 bin/dot packages
-bin/dot setup-safe
+bin/dot setup --backup
 exec zsh
 ```
 
-`setup-safe` is the recommended first run. It backs up conflicts to `*.backup` instead of replacing them in place.
+`setup --backup` is the recommended first run. It backs up conflicts to `*.backup` instead of replacing them in place.
 
 `script/bootstrap` also creates these local-only files when they do not exist:
 
@@ -36,16 +36,18 @@ That keeps identity, secrets, proxies, and machine-specific paths out of the tra
 
 ```sh
 bin/dot setup             # bootstrap + package install
-bin/dot setup-safe        # bootstrap with backups + package install
-bin/dot setup-user        # bootstrap and skip system packages
+bin/dot setup --backup    # bootstrap with backups + package install
+bin/dot setup --user      # bootstrap and skip system packages
 bin/dot bootstrap         # only manage symlinks
 bin/dot install           # only install packages and topic extras
-bin/dot install-user      # install topic extras and skip system packages
+bin/dot install --user    # install topic extras and skip system packages
+bin/dot install --toolchains # install toolchain packages, language tools, and runtimes
 bin/dot packages          # print package list for this machine
+bin/dot packages --toolchains # print toolchain package list
 bin/dot ssh               # initialize ~/.ssh permissions and baseline config
-bin/dot toolchains        # install toolchain packages, language tools, and optional runtimes
-bin/dot toolchains-packages # print toolchain package list
-bin/dot toolchains-runtimes # run only optional runtime installers
+bin/dot toolchains        # same as install --toolchains
+bin/dot toolchains --packages # print toolchain package list
+bin/dot toolchains --runtimes # run only optional runtime installers
 bin/dot update            # git pull + install
 bin/dot edit              # open the repo in $EDITOR
 ```
@@ -65,7 +67,7 @@ script/bootstrap --skip-gitconfig
 1. Installs packages from `packages/common.txt` plus the current distro file.
 2. Runs each topic `install.sh`.
 
-If the current user is not root and does not have passwordless `sudo`, system packages are skipped automatically. Use `bin/dot setup-user` or `bin/dot install-user` when you explicitly want user-only setup.
+If the current user is not root and does not have passwordless `sudo`, system packages are skipped automatically. Use `bin/dot setup --user` or `bin/dot install --user` when you explicitly want user-only setup.
 
 Base install hooks:
 
@@ -85,7 +87,7 @@ Toolchain mode adds:
 Run it separately from setup when you want a fuller development workstation:
 
 ```sh
-bin/dot toolchains-packages
+bin/dot packages --toolchains
 bin/dot toolchains
 ```
 

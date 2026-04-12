@@ -3,7 +3,7 @@
 #
 # Set the toolchains you want to install during:
 #   bin/dot toolchains
-#   bin/dot toolchains-runtimes
+#   bin/dot toolchains --runtimes
 
 export DOTFILES_INSTALL_RUSTUP=0
 export DOTFILES_INSTALL_NVM=0
