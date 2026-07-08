@@ -2,3 +2,10 @@
 fd
 base-devel
 openssh
+bind
+iproute2
+iputils
+openbsd-netcat
+procps-ng
+python
+xz

@@ -2,3 +2,10 @@
 fd-find
 build-essential
 openssh-client
+dnsutils
+iproute2
+iputils-ping
+netcat-openbsd
+procps
+python3
+xz-utils

@@ -3,5 +3,4 @@ direnv
 luarocks
 shellcheck
 shfmt
-tree
 xclip

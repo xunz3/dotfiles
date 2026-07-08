@@ -115,6 +115,7 @@ print_packages () {
 
 install_linux_packages () {
 	local manager=''
+	local -a packages
 	if ! manager="$(detect_package_manager)"
 	then
 		fail 'no supported package manager found (apt-get, dnf, pacman, zypper)'
@@ -141,22 +142,88 @@ install_linux_packages () {
 	fi
 
 	info "installing packages with $manager"
+	if [[ "$manager" == "apt" ]]
+	then
+		if ! run_as_root apt-get update
+		then
+			info 'apt package metadata update failed; continuing with existing metadata'
+		fi
+	fi
+
+	if install_package_batch "$manager" "${packages[@]}"
+	then
+		success "$manager packages installed"
+		return
+	fi
+
+	info 'bulk package installation failed; retrying one package at a time'
+	retry_packages_individually "$manager" "${packages[@]}"
+}
+
+install_package_batch () {
+	local manager=$1
+	shift
+
 	case "$manager" in
 		apt)
-			run_as_root apt-get update
-			run_as_root apt-get install -y "${packages[@]}"
+			run_as_root apt-get install -y "$@"
 			;;
 		dnf)
-			run_as_root dnf install -y "${packages[@]}"
+			run_as_root dnf install -y "$@"
 			;;
 		pacman)
-			run_as_root pacman -S --needed --noconfirm "${packages[@]}"
+			run_as_root pacman -S --needed --noconfirm "$@"
 			;;
 		zypper)
-			run_as_root zypper --non-interactive install "${packages[@]}"
+			run_as_root zypper --non-interactive install "$@"
 			;;
 	esac
-	success "$manager packages installed"
+}
+
+install_one_package () {
+	local manager=$1
+	local package=$2
+
+	case "$manager" in
+		apt)
+			run_as_root apt-get install -y "$package"
+			;;
+		dnf)
+			run_as_root dnf install -y "$package"
+			;;
+		pacman)
+			run_as_root pacman -S --needed --noconfirm "$package"
+			;;
+		zypper)
+			run_as_root zypper --non-interactive install "$package"
+			;;
+	esac
+}
+
+retry_packages_individually () {
+	local manager=$1
+	shift
+	local package
+	local failed=()
+
+	for package in "$@"
+	do
+		if install_one_package "$manager" "$package"
+		then
+			continue
+		fi
+
+		failed+=("$package")
+	done
+
+	if [[ ${#failed[@]} -eq 0 ]]
+	then
+		success "$manager packages installed"
+		return
+	fi
+
+	info "packages not installed: ${failed[*]}"
+	info 'continuing with topic installers'
 }
 
 run_topic_installer () {

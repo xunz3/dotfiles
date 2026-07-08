@@ -78,14 +78,36 @@ setup_gitconfig () {
   then
     info 'setup gitconfig'
 
-    git_credential='cache'
+    local git_authorname="${DOTFILES_GIT_AUTHORNAME:-}"
+    local git_authoremail="${DOTFILES_GIT_AUTHOREMAIL:-}"
+    local git_credential="${DOTFILES_GIT_CREDENTIAL_HELPER:-cache}"
+    local template
 
-    user ' - What is your github author name?'
-    read -e git_authorname
-    user ' - What is your github author email?'
-    read -e git_authoremail
+    if [[ -z "$git_authorname" || -z "$git_authoremail" ]]
+    then
+      if [[ ! -t 0 ]]
+      then
+        info 'skipping gitconfig setup; set DOTFILES_GIT_AUTHORNAME and DOTFILES_GIT_AUTHOREMAIL or rerun interactively'
+        return
+      fi
 
-    sed -e "s/AUTHORNAME/$git_authorname/g" -e "s/AUTHOREMAIL/$git_authoremail/g" -e "s/GIT_CREDENTIAL_HELPER/$git_credential/g" git/gitconfig.local.symlink.example > "$HOME/.gitconfig.local"
+      user ' - What is your github author name?'
+      read -r -e git_authorname
+      user ' - What is your github author email?'
+      read -r -e git_authoremail
+    fi
+
+    if [[ -z "$git_authorname" || -z "$git_authoremail" ]]
+    then
+      info 'git author name or email was empty; skipping gitconfig setup'
+      return
+    fi
+
+    template="$(< git/gitconfig.local.symlink.example)"
+    template="${template//AUTHORNAME/$git_authorname}"
+    template="${template//AUTHOREMAIL/$git_authoremail}"
+    template="${template//GIT_CREDENTIAL_HELPER/$git_credential}"
+    printf '%s\n' "$template" > "$HOME/.gitconfig.local"
     chmod 600 "$HOME/.gitconfig.local"
 
     success 'created ~/.gitconfig.local'

@@ -4,3 +4,10 @@ gcc
 gcc-c++
 make
 openssh
+bind-utils
+iproute2
+iputils
+netcat-openbsd
+procps
+python3
+xz

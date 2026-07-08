@@ -2,6 +2,7 @@
 git
 curl
 wget
+ca-certificates
 zsh
 vim
 tmux
@@ -9,9 +10,17 @@ htop
 neofetch
 ripgrep
 fzf
+less
 unzip
 zip
 jq
+yq
 bat
 grc
 gh
+rsync
+tree
+file
+lsof
+ncdu
+btop

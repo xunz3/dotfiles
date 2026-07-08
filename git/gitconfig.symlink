@@ -1,8 +1,6 @@
 # Local/private config goes in the include
 [include]
         path = ~/.gitconfig.local
-[hub]
-        protocol = https
 [alias]
         co = checkout
         promote = !$HOME/.dotfiles/bin/git-promote
@@ -31,8 +29,21 @@
         #
         # Setting to git 2.0 default to suppress warning message
         default = simple
-[diff "spaceman-diff"]
-        command = spaceman-diff
-
+[pull]
+        ff = only
+[fetch]
+        prune = true
+[rebase]
+        autoStash = true
+[rerere]
+        enabled = true
+[column]
+        ui = auto
+[branch]
+        sort = -committerdate
+[tag]
+        sort = version:refname
+[diff]
+        algorithm = histogram
 [init]
 	defaultBranch = main

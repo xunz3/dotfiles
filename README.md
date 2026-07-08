@@ -24,9 +24,15 @@ exec zsh
 
 `setup --backup` is the recommended first run. It backs up conflicts to `*.backup` instead of replacing them in place.
 
+For non-interactive server bootstrap, provide Git identity through environment variables:
+
+```sh
+DOTFILES_GIT_AUTHORNAME="Your Name" DOTFILES_GIT_AUTHOREMAIL="you@example.com" bin/dot setup --backup
+```
+
 `script/bootstrap` also creates these local-only files when they do not exist:
 
-- `~/.gitconfig.local` from `git/gitconfig.local.symlink.example` if it does not exist
+- `~/.gitconfig.local` from `git/gitconfig.local.symlink.example` if identity is provided interactively or through environment variables
 - `~/.localrc` from `local/localrc.example` if it does not exist
 - `~/.toolchainsrc` from `local/toolchainsrc.example` if it does not exist
 
@@ -67,7 +73,9 @@ script/bootstrap --skip-gitconfig
 1. Installs packages from `packages/common.txt` plus the current distro file.
 2. Runs each topic `install.sh`.
 
-By default, package installation uses the system package manager through `sudo` when needed. Use `bin/dot setup --user` or `bin/dot install --user` when you explicitly want to skip system packages.
+By default, package installation uses the system package manager through `sudo` when needed. It installs in bulk first, then retries packages one by one if a distro mirror or package name causes the bulk install to fail. Use `bin/dot setup --user` or `bin/dot install --user` when you explicitly want to skip system packages.
+
+The base profile includes a practical server/workstation baseline: Git, zsh, Vim, tmux, htop, Neovim support tools, GitHub CLI, ripgrep/fzf, JSON/YAML tools, archive tools, rsync, tree, file, lsof, ncdu, btop, OpenSSH client, DNS/IP/ping/netcat utilities, Python 3, and build essentials for the current distro.
 
 Base install hooks:
 
