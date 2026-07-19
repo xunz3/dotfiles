@@ -37,8 +37,6 @@ Common options:
 	packages --toolchains [profiles] Print selected toolchain package lists
 	toolchains list       Print available toolchain profiles
 	toolchains node java  Install selected toolchain profiles
-	toolchains --packages node Print selected toolchain package lists
-	toolchains --runtimes Run legacy optional runtime flags
 EOF
 	exit "$exit_code"
 }
@@ -104,8 +102,6 @@ run_setup() {
 }
 
 run_toolchains() {
-	local packages_only=false
-	local runtimes_only=false
 	local install_args=(--toolchains)
 	local profiles=()
 
@@ -115,12 +111,6 @@ run_toolchains() {
 			list)
 				"$dotfiles_directory/toolchains/install.sh" list
 				return
-				;;
-			--packages|--print|--list)
-				packages_only=true
-				;;
-			--runtimes)
-				runtimes_only=true
 				;;
 			--user)
 				install_args+=(--user)
@@ -135,21 +125,7 @@ run_toolchains() {
 		shift
 	done
 
-	if [[ "$packages_only" == "true" && "$runtimes_only" == "true" ]]
-	then
-		echo "Use only one of --packages or --runtimes." >&2
-		exit 1
-	fi
-
-	if [[ "$packages_only" == "true" ]]
-	then
-		run_install --print --toolchains "${profiles[@]}"
-	elif [[ "$runtimes_only" == "true" ]]
-	then
-		"$dotfiles_directory/toolchains/install.sh" runtimes
-	else
-		run_install "${install_args[@]}" "${profiles[@]}"
-	fi
+	run_install "${install_args[@]}" "${profiles[@]}"
 }
 
 run_ssh() {

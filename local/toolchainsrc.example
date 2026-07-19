@@ -23,10 +23,3 @@ export DOTFILES_RUST_CARGO_PACKAGES=""
 export DOTFILES_GO_TOOLS="golang.org/x/tools/gopls@latest mvdan.cc/gofumpt@latest golang.org/x/tools/cmd/goimports@latest github.com/go-delve/delve/cmd/dlv@latest"
 
 export DOTFILES_PYTHON_UV_TOOLS="ruff ipython"
-
-# Legacy runtime-only flags used by:
-#   bin/dot toolchains --runtimes
-export DOTFILES_INSTALL_RUSTUP=0
-export DOTFILES_INSTALL_NVM=0
-export DOTFILES_INSTALL_BUN=0
-export DOTFILES_INSTALL_SDKMAN=0

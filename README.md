@@ -54,8 +54,6 @@ bin/dot ssh               # initialize ~/.ssh permissions and baseline config
 bin/dot toolchains list   # print available toolchain profiles
 bin/dot toolchains        # install default profiles from ~/.toolchainsrc
 bin/dot toolchains node java # install selected profiles
-bin/dot toolchains --packages node # print selected profile package list
-bin/dot toolchains --runtimes # run legacy runtime-only installers
 bin/dot update            # git pull + install
 bin/dot edit              # open the repo in $EDITOR
 ```
@@ -87,7 +85,7 @@ Base install hooks:
 - `ssh/install.sh`: initializes `~/.ssh` permissions and a baseline client config
 - `toolchains/install.sh`: dispatches selected toolchain profiles
 
-Topic installers run in this order: `ssh`, `zsh`, `vim`, `nvim`, then `toolchains`. A failed topic installer is reported but does not prevent the remaining topics from running.
+Base topic installers run in this order: `ssh`, `zsh`, `vim`, then `nvim`. In toolchain mode, `toolchains/install.sh` runs after those base installers. A failed topic installer is reported but does not prevent the remaining topics from running.
 
 Toolchain profiles are independent. Select only what a machine needs:
 
@@ -110,8 +108,6 @@ Available profiles:
 - `bun`: installs Bun
 
 Each profile can have package prerequisites under `toolchains/packages/common/<profile>.txt` and `toolchains/packages/<distro>/<profile>.txt`. The installer reads those files after the base package list and before running profile scripts.
-
-Legacy runtime-only flags are still supported for `bin/dot toolchains --runtimes`. New setups should prefer `DOTFILES_TOOLCHAINS`.
 
 The Neovim toolchain profile aims to cover a broad mainstream baseline:
 

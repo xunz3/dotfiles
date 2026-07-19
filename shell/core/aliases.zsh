@@ -1,4 +1,4 @@
-# shell aliases and Linux command compatibility shims
+# shell aliases and Linux package-name shims
 alias reload!='. ~/.zshrc'
 alias cls='clear'
 

@@ -31,51 +31,14 @@ Profiles:
 
 Commands:
   list      Print available profiles
-  runtimes  Run legacy ~/.toolchainsrc runtime flags only
 
 When no profile is passed, DOTFILES_TOOLCHAINS from ~/.toolchainsrc is used.
-If DOTFILES_TOOLCHAINS is unset, the default is nvim plus any legacy runtime
-flags enabled in ~/.toolchainsrc.
+If DOTFILES_TOOLCHAINS is unset, the default is nvim.
 EOF
 }
 
 print_profiles () {
 	dotfiles_toolchain_all_profiles
-}
-
-run_legacy_runtimes () {
-	local installed=0
-
-	load_toolchain_config
-
-	if [[ "${DOTFILES_INSTALL_RUSTUP:-0}" == "1" ]]
-	then
-		install_rustup
-		installed=1
-	fi
-
-	if [[ "${DOTFILES_INSTALL_NVM:-0}" == "1" ]]
-	then
-		install_nvm
-		installed=1
-	fi
-
-	if [[ "${DOTFILES_INSTALL_BUN:-0}" == "1" ]]
-	then
-		install_bun_runtime
-		installed=1
-	fi
-
-	if [[ "${DOTFILES_INSTALL_SDKMAN:-0}" == "1" ]]
-	then
-		install_sdkman
-		installed=1
-	fi
-
-	if [[ "$installed" == "0" ]]
-	then
-		info 'no legacy runtime flags enabled in ~/.toolchainsrc; skipping'
-	fi
 }
 
 run_profile () {
@@ -145,19 +108,10 @@ case "${1:-}" in
 		usage
 		exit 0
 		;;
-	list|--list|--print)
+	list)
 		print_profiles
 		exit 0
 		;;
-	runtimes|--runtimes)
-		run_legacy_runtimes
-		exit 0
-		;;
 esac
-
-if [[ $# -eq 0 && "${DOTFILES_INSTALL_TOOLCHAINS:-0}" != "1" ]]
-then
-	exit 0
-fi
 
 run_profiles "$@"

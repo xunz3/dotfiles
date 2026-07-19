@@ -7,7 +7,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 DOTFILES_ROOT=$(pwd -P)
 print_only=false
-install_toolchains="${DOTFILES_INSTALL_TOOLCHAINS:-0}"
+install_toolchains=0
 skip_packages=0
 toolchain_profiles=()
 resolved_toolchain_profiles=()
@@ -30,7 +30,7 @@ usage () {
 Usage: script/install [options]
 
 Options:
-  --print, --list   print the package list for the current machine
+  --print         print the package list for the current machine
   --user           skip system package installation
   --toolchains     include selected toolchain package lists and installers
   -h, --help        show this help text
@@ -237,10 +237,11 @@ retry_packages_individually () {
 
 run_topic_installer () {
 	local installer=$1
+	shift
 	local label="${installer#"$DOTFILES_ROOT/"}"
 
 	info "running $label"
-	if "$installer"
+	if "$installer" "$@"
 	then
 		return 0
 	fi
@@ -262,14 +263,17 @@ is_ordered_topic_installer () {
 run_topic_installers () {
 	local installer topic
 
-	export DOTFILES_INSTALL_TOOLCHAINS="$install_toolchains"
-	export DOTFILES_TOOLCHAIN_PROFILES="${resolved_toolchain_profiles[*]:-}"
-
-	for topic in ssh zsh vim nvim toolchains
+	for topic in ssh zsh vim nvim
 	do
 		installer="$DOTFILES_ROOT/$topic/install.sh"
 		[[ -f "$installer" ]] && run_topic_installer "$installer"
 	done
+
+	if [[ "$install_toolchains" == "1" ]]
+	then
+		installer="$DOTFILES_ROOT/toolchains/install.sh"
+		[[ -f "$installer" ]] && run_topic_installer "$installer" "${resolved_toolchain_profiles[@]}"
+	fi
 
 	while IFS= read -r -d '' installer
 	do
@@ -281,7 +285,7 @@ run_topic_installers () {
 while [[ $# -gt 0 ]]
 do
 	case "$1" in
-		--print|--list)
+		--print)
 			print_only=true
 			;;
 		--user)
