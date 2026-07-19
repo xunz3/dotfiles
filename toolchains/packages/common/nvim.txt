@@ -1,0 +1,6 @@
+# Shared packages for the Neovim language-tool profile.
+direnv
+luarocks
+shellcheck
+shfmt
+xclip

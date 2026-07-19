@@ -9,6 +9,8 @@ DOTFILES_ROOT=$(pwd -P)
 print_only=false
 install_toolchains="${DOTFILES_INSTALL_TOOLCHAINS:-0}"
 skip_packages=0
+toolchain_profiles=()
+resolved_toolchain_profiles=()
 
 info () {
 	printf "\r  [ \033[00;34m..\033[0m ] %s\n" "$1"
@@ -30,8 +32,11 @@ Usage: script/install [options]
 Options:
   --print, --list   print the package list for the current machine
   --user           skip system package installation
-  --toolchains     include toolchain package lists and toolchain installers
+  --toolchains     include selected toolchain package lists and installers
   -h, --help        show this help text
+
+Toolchain profiles may follow --toolchains, for example:
+  script/install --toolchains node java
 EOF
 }
 
@@ -79,14 +84,18 @@ detect_package_manager () {
 
 resolve_packages () {
 	local manager=$1
+	local profile
 
 	{
 		read_package_file "$DOTFILES_ROOT/packages/common.txt"
 		read_package_file "$DOTFILES_ROOT/packages/${manager}.txt"
 		if [[ "$install_toolchains" == "1" ]]
 		then
-			read_package_file "$DOTFILES_ROOT/packages/common-toolchains.txt"
-			read_package_file "$DOTFILES_ROOT/packages/${manager}-toolchains.txt"
+			for profile in "${resolved_toolchain_profiles[@]}"
+			do
+				read_package_file "$DOTFILES_ROOT/toolchains/packages/common/${profile}.txt"
+				read_package_file "$DOTFILES_ROOT/toolchains/packages/${manager}/${profile}.txt"
+			done
 		fi
 	} | awk '!seen[$0]++'
 }
@@ -98,7 +107,7 @@ print_packages () {
 	local profile='base'
 	if [[ "$install_toolchains" == "1" ]]
 	then
-		profile='toolchains'
+		profile="toolchains:${resolved_toolchain_profiles[*]:-none}"
 	fi
 
 	printf 'package manager: %s\n' "$manager"
@@ -254,6 +263,7 @@ run_topic_installers () {
 	local installer topic
 
 	export DOTFILES_INSTALL_TOOLCHAINS="$install_toolchains"
+	export DOTFILES_TOOLCHAIN_PROFILES="${resolved_toolchain_profiles[*]:-}"
 
 	for topic in ssh zsh vim nvim toolchains
 	do
@@ -285,11 +295,35 @@ do
 			exit 0
 			;;
 		*)
-			fail "unknown option: $1"
+			if [[ "$install_toolchains" == "1" ]]
+			then
+				toolchain_profiles+=("$1")
+			else
+				fail "unknown option: $1"
+			fi
 			;;
 	esac
 	shift
 done
+
+if [[ "$install_toolchains" == "1" ]]
+then
+	# shellcheck source=toolchains/lib/profiles.sh
+	source "$DOTFILES_ROOT/toolchains/lib/profiles.sh"
+	if [[ -f "$HOME/.toolchainsrc" ]]
+	then
+		# shellcheck source=/dev/null
+		source "$HOME/.toolchainsrc"
+	fi
+	mapfile -t resolved_toolchain_profiles < <(dotfiles_toolchain_resolve_profiles "${toolchain_profiles[@]}")
+	for profile in "${resolved_toolchain_profiles[@]}"
+	do
+		if ! dotfiles_toolchain_profile_exists "$profile"
+		then
+			fail "unknown toolchain profile: $profile"
+		fi
+	done
+fi
 
 case "$(uname -s)" in
 	Linux)

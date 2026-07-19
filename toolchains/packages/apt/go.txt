@@ -1,0 +1,2 @@
+# Go toolchain package for Debian/Ubuntu.
+golang-go

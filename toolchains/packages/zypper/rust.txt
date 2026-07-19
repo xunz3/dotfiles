@@ -1,0 +1,3 @@
+# Native dependencies for common Rust crates on openSUSE.
+pkg-config
+libopenssl-devel

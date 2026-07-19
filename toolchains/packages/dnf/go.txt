@@ -1,0 +1,2 @@
+# Go toolchain package for Fedora/RHEL-family systems.
+golang

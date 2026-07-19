@@ -1,0 +1,3 @@
+# Python helpers for Arch-family projects.
+python-pip
+python-virtualenv

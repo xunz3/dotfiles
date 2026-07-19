@@ -3,6 +3,11 @@
         path = ~/.gitconfig.local
 [alias]
         co = checkout
+        br = branch
+        ci = commit
+        st = status
+        unstage = reset HEAD --
+        last = log -1 HEAD
         promote = !$HOME/.dotfiles/bin/git-promote
         wtf     = !$HOME/.dotfiles/bin/git-wtf
         rank-contributors = !$HOME/.dotfiles/bin/git-rank-contributors

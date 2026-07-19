@@ -1,0 +1,2 @@
+# Python helpers for Fedora/RHEL-family projects.
+python3-pip

@@ -1,0 +1,3 @@
+# Native dependencies for common Rust crates on Fedora/RHEL-family systems.
+pkgconf-pkg-config
+openssl-devel

@@ -8,7 +8,7 @@ This repo manages:
 - terminal: `tmux`
 - editors: `vim`, `neovim`
 - CLI config: `git`, `htop`, `neofetch`
-- optional toolchains: `rustup`, `nvm`, `bun`, `sdkman`
+- optional toolchain profiles: `nvim`, `node`, `java`, `rust`, `go`, `python`, `bun`
 
 ## Fresh Machine Setup
 
@@ -47,13 +47,15 @@ bin/dot setup --user      # bootstrap and skip system packages
 bin/dot bootstrap         # only manage symlinks
 bin/dot install           # only install packages and topic extras
 bin/dot install --user    # install topic extras and skip system packages
-bin/dot install --toolchains # install toolchain packages, language tools, and runtimes
+bin/dot install --toolchains node java # install selected toolchain profiles
 bin/dot packages          # print package list for this machine
-bin/dot packages --toolchains # print toolchain package list
+bin/dot packages --toolchains node # print package list for selected toolchains
 bin/dot ssh               # initialize ~/.ssh permissions and baseline config
-bin/dot toolchains        # same as install --toolchains
-bin/dot toolchains --packages # print toolchain package list
-bin/dot toolchains --runtimes # run only optional runtime installers
+bin/dot toolchains list   # print available toolchain profiles
+bin/dot toolchains        # install default profiles from ~/.toolchainsrc
+bin/dot toolchains node java # install selected profiles
+bin/dot toolchains --packages node # print selected profile package list
+bin/dot toolchains --runtimes # run legacy runtime-only installers
 bin/dot update            # git pull + install
 bin/dot edit              # open the repo in $EDITOR
 ```
@@ -81,27 +83,35 @@ Base install hooks:
 
 - `zsh/install.sh`: `oh-my-zsh`, `zsh-autosuggestions`, `zsh-syntax-highlighting`
 - `vim/install.sh`: `vim-plug` and Vim plugins
-- `nvim/install.sh`: installs the official Neovim release into `~/.local/opt`, links `~/.local/bin/nvim`, runs headless `Lazy sync`, and in toolchain mode `MasonToolsInstallSync`
+- `nvim/install.sh`: installs the official Neovim release into `~/.local/opt`, links `~/.local/bin/nvim`, and runs headless `Lazy sync`
 - `ssh/install.sh`: initializes `~/.ssh` permissions and a baseline client config
-- `toolchains/install.sh`: optional `rustup`, `nvm`, `bun`, `sdkman`
+- `toolchains/install.sh`: dispatches selected toolchain profiles
 
 Topic installers run in this order: `ssh`, `zsh`, `vim`, `nvim`, then `toolchains`. A failed topic installer is reported but does not prevent the remaining topics from running.
 
-Toolchain mode adds:
-
-- `packages/common-toolchains.txt`
-- distro-specific toolchain package lists such as `packages/apt-toolchains.txt`
-- Neovim Mason language tools
-- optional runtime managers for the current run
-
-`bin/dot toolchains` is a convenience entry point for `bin/dot install --toolchains`. Run it separately from setup when you want a fuller development workstation:
+Toolchain profiles are independent. Select only what a machine needs:
 
 ```sh
-bin/dot packages --toolchains
-bin/dot toolchains
+bin/dot toolchains list
+bin/dot packages --toolchains node java
+bin/dot toolchains node java
 ```
 
-Runtime managers stay opt-in even in toolchain mode. Edit `~/.toolchainsrc` and set the entries you want to `1`. Use `bin/dot toolchains --runtimes` when you only want those runtime managers, without package installation or Neovim Mason tools.
+When no profile is passed, `bin/dot toolchains` uses `DOTFILES_TOOLCHAINS` from `~/.toolchainsrc`. The template defaults to `nvim`.
+
+Available profiles:
+
+- `nvim`: installs Neovim Mason language tools from `nvim/config/nvim/lua/plugins/lsp.lua`
+- `node`: installs `nvm`, Node.js LTS, Corepack, `pnpm`, `yarn`, and npm global tools
+- `java`: installs `sdkman`, JDK 21 Temurin, Maven, Gradle, and Kotlin
+- `rust`: installs `rustup`, stable Rust, `rustfmt`, and `clippy`
+- `go`: installs common Go tools with `go install`
+- `python`: installs `uv` and selected Python CLI tools
+- `bun`: installs Bun
+
+Each profile can have package prerequisites under `toolchains/packages/common/<profile>.txt` and `toolchains/packages/<distro>/<profile>.txt`. The installer reads those files after the base package list and before running profile scripts.
+
+Legacy runtime-only flags are still supported for `bin/dot toolchains --runtimes`. New setups should prefer `DOTFILES_TOOLCHAINS`.
 
 The Neovim toolchain profile aims to cover a broad mainstream baseline:
 
@@ -145,6 +155,9 @@ XDG config:
 - `zsh/`: zsh entrypoints, prompt, window behavior, and installer
 - `topic/install.sh`: topic-specific installers
 - `packages/*.txt`: package lists by package manager
+- `toolchains/profiles/`: profile scripts such as `node.sh` and `java.sh`
+- `toolchains/packages/`: profile-specific package prerequisites
+- `toolchains/lib/`: shared toolchain installer helpers
 - `local/*.example`: local-only file templates
 
 ## Local-Only Settings
@@ -153,7 +166,7 @@ Keep anything machine-specific outside the tracked config:
 
 - Git identity: `~/.gitconfig.local`
 - secrets and tokens: `~/.localrc`
-- toolchain install flags: `~/.toolchainsrc`
+- toolchain profile defaults: `~/.toolchainsrc`
 - proxy settings: `~/.localrc`
 - custom paths such as `PROJECTS`: `~/.localrc`
 - machine-specific shell hooks, such as local proxy controllers: `~/.localrc`
@@ -175,6 +188,7 @@ Rules of thumb:
 - XDG app config: add `topic/config/<app>/`
 - reusable shell logic: add a `*.zsh` file under `shell/core/` or `shell/apps/<tool>/`
 - one-time setup or tool bootstrap: add `topic/install.sh`
+- toolchain profile: add `toolchains/profiles/<name>.sh` and any package files under `toolchains/packages/`
 
 Examples:
 

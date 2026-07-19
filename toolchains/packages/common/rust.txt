@@ -1,0 +1,2 @@
+# Common native-build helpers used by many Rust crates.
+cmake

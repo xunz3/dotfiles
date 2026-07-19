@@ -1,133 +1,163 @@
 #!/usr/bin/env bash
 #
-# Install optional developer toolchains. This installer is a no-op unless
-# explicitly enabled for the current run or via ~/.toolchainsrc.
+# Install selected developer toolchain profiles.
 
 set -euo pipefail
 
-info () {
-	printf "\r  [ \033[00;34m..\033[0m ] %s\n" "$1"
+cd "$(dirname "$0")/.."
+DOTFILES_ROOT=$(pwd -P)
+TOOLCHAINS_ROOT="$DOTFILES_ROOT/toolchains"
+
+# shellcheck source=toolchains/lib/common.sh
+source "$TOOLCHAINS_ROOT/lib/common.sh"
+# shellcheck source=toolchains/lib/profiles.sh
+source "$TOOLCHAINS_ROOT/lib/profiles.sh"
+# shellcheck source=toolchains/lib/runtimes.sh
+source "$TOOLCHAINS_ROOT/lib/runtimes.sh"
+
+usage () {
+	cat <<'EOF'
+Usage: toolchains/install.sh [profiles]
+
+Profiles:
+  nvim   Install Neovim Mason language tools
+  node   Install nvm, Node.js LTS, pnpm, yarn, and npm globals
+  java   Install sdkman, JDK, Maven, Gradle, and Kotlin
+  rust   Install rustup, Rust stable, rustfmt, and clippy
+  go     Install common Go tools with go install
+  python Install uv and selected Python CLI tools
+  bun    Install bun
+  all    Install every profile
+
+Commands:
+  list      Print available profiles
+  runtimes  Run legacy ~/.toolchainsrc runtime flags only
+
+When no profile is passed, DOTFILES_TOOLCHAINS from ~/.toolchainsrc is used.
+If DOTFILES_TOOLCHAINS is unset, the default is nvim plus any legacy runtime
+flags enabled in ~/.toolchainsrc.
+EOF
 }
 
-success () {
-	printf "\r\033[2K  [ \033[00;32mOK\033[0m ] %s\n" "$1"
+print_profiles () {
+	dotfiles_toolchain_all_profiles
 }
 
-have_command () {
-	command -v "$1" >/dev/null 2>&1
-}
+run_legacy_runtimes () {
+	local installed=0
 
-run_remote_script () {
-	local url=$1
-	shift
+	load_toolchain_config
 
-	if have_command curl
+	if [[ "${DOTFILES_INSTALL_RUSTUP:-0}" == "1" ]]
 	then
-		curl -fsSL "$url" | "$@"
-	elif have_command wget
+		install_rustup
+		installed=1
+	fi
+
+	if [[ "${DOTFILES_INSTALL_NVM:-0}" == "1" ]]
 	then
-		wget -qO- "$url" | "$@"
-	else
-		info "neither curl nor wget is available; skipping $url"
+		install_nvm
+		installed=1
+	fi
+
+	if [[ "${DOTFILES_INSTALL_BUN:-0}" == "1" ]]
+	then
+		install_bun_runtime
+		installed=1
+	fi
+
+	if [[ "${DOTFILES_INSTALL_SDKMAN:-0}" == "1" ]]
+	then
+		install_sdkman
+		installed=1
+	fi
+
+	if [[ "$installed" == "0" ]]
+	then
+		info 'no legacy runtime flags enabled in ~/.toolchainsrc; skipping'
+	fi
+}
+
+run_profile () {
+	local profile=$1
+	local profile_file="$TOOLCHAINS_ROOT/profiles/$profile.sh"
+	local profile_function="profile_${profile//-/_}"
+
+	if ! dotfiles_toolchain_profile_exists "$profile"
+	then
+		info "unknown toolchain profile: $profile"
+		return 1
+	fi
+
+	if [[ ! -f "$profile_file" ]]
+	then
+		info "toolchain profile has no installer: $profile"
+		return 1
+	fi
+
+	# shellcheck source=/dev/null
+	source "$profile_file"
+
+	if ! declare -F "$profile_function" >/dev/null
+	then
+		info "toolchain profile is missing $profile_function"
+		return 1
+	fi
+
+	info "running toolchain profile: $profile"
+	"$profile_function"
+}
+
+run_profiles () {
+	local requested=("$@")
+	local profiles=()
+	local profile
+	local failed=()
+
+	load_toolchain_config
+	mapfile -t profiles < <(dotfiles_toolchain_resolve_profiles "${requested[@]}")
+
+	if [[ ${#profiles[@]} -eq 0 ]]
+	then
+		info 'no toolchain profiles selected; skipping'
+		return 0
+	fi
+
+	for profile in "${profiles[@]}"
+	do
+		if run_profile "$profile"
+		then
+			success "toolchain profile complete: $profile"
+		else
+			failed+=("$profile")
+		fi
+	done
+
+	if [[ ${#failed[@]} -gt 0 ]]
+	then
+		info "toolchain profiles failed: ${failed[*]}"
 		return 1
 	fi
 }
 
-load_local_flags () {
-	if [[ -f "$HOME/.toolchainsrc" ]]
-	then
-		# shellcheck source=/dev/null
-		source "$HOME/.toolchainsrc"
-	fi
-}
+case "${1:-}" in
+	-h|--help)
+		usage
+		exit 0
+		;;
+	list|--list|--print)
+		print_profiles
+		exit 0
+		;;
+	runtimes|--runtimes)
+		run_legacy_runtimes
+		exit 0
+		;;
+esac
 
-want_toolchain () {
-	local flag_name=$1
-
-	[[ "${!flag_name:-0}" == "1" ]]
-}
-
-install_rustup () {
-	if have_command rustup
-	then
-		success 'rustup already installed'
-		return
-	fi
-
-	info 'installing rustup'
-	run_remote_script "https://sh.rustup.rs" sh -s -- -y
-	success 'installed rustup'
-}
-
-install_nvm () {
-	local target_dir="${NVM_DIR:-$HOME/.nvm}"
-
-	if [[ -s "$target_dir/nvm.sh" ]]
-	then
-		success 'nvm already installed'
-		return
-	fi
-
-	if ! have_command git
-	then
-		info 'git is required to install nvm; skipping'
-		return
-	fi
-
-	if [[ -e "$target_dir" ]]
-	then
-		info "$target_dir exists and is not an nvm install; skipping"
-		return
-	fi
-
-	info 'cloning nvm'
-	git clone --depth=1 https://github.com/nvm-sh/nvm.git "$target_dir"
-	success 'installed nvm'
-}
-
-install_bun () {
-	if have_command bun
-	then
-		success 'bun already installed'
-		return
-	fi
-
-	info 'installing bun'
-	run_remote_script "https://bun.sh/install" bash
-	success 'installed bun'
-}
-
-install_sdkman () {
-	local sdkman_dir="${SDKMAN_DIR:-$HOME/.sdkman}"
-
-	if [[ -s "$sdkman_dir/bin/sdkman-init.sh" ]]
-	then
-		success 'sdkman already installed'
-		return
-	fi
-
-	info 'installing sdkman'
-	run_remote_script "https://get.sdkman.io" bash
-	success 'installed sdkman'
-}
-
-load_local_flags
-
-if [[ "${DOTFILES_INSTALL_TOOLCHAINS:-0}" != "1" ]]
+if [[ $# -eq 0 && "${DOTFILES_INSTALL_TOOLCHAINS:-0}" != "1" ]]
 then
 	exit 0
 fi
 
-if ! want_toolchain DOTFILES_INSTALL_RUSTUP \
-	&& ! want_toolchain DOTFILES_INSTALL_NVM \
-	&& ! want_toolchain DOTFILES_INSTALL_BUN \
-	&& ! want_toolchain DOTFILES_INSTALL_SDKMAN
-then
-	info 'no optional toolchains enabled in ~/.toolchainsrc; skipping'
-	exit 0
-fi
-
-want_toolchain DOTFILES_INSTALL_RUSTUP && install_rustup
-want_toolchain DOTFILES_INSTALL_NVM && install_nvm
-want_toolchain DOTFILES_INSTALL_BUN && install_bun
-want_toolchain DOTFILES_INSTALL_SDKMAN && install_sdkman
+run_profiles "$@"

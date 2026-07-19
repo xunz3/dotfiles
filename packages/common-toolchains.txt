@@ -1,6 +1,0 @@
-# Optional extras for a fuller development environment.
-direnv
-luarocks
-shellcheck
-shfmt
-xclip

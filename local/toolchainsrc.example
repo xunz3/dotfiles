@@ -1,10 +1,31 @@
-# Local-only toolchain bootstrap flags.
+# Local-only toolchain bootstrap settings.
 # This file is copied to ~/.toolchainsrc on first bootstrap if it does not exist.
 #
-# Set the toolchains you want to install during:
+# Select the default profiles used by:
 #   bin/dot toolchains
-#   bin/dot toolchains --runtimes
+#   bin/dot packages --toolchains
+#
+# Available profiles: nvim node java rust go python bun
+export DOTFILES_TOOLCHAINS="nvim"
 
+# Profile-specific defaults.
+export DOTFILES_NODE_VERSION="lts"
+export DOTFILES_PNPM_VERSION="latest"
+export DOTFILES_YARN_VERSION="stable"
+export DOTFILES_NODE_GLOBAL_PACKAGES="typescript tsx prettier eslint npm-check-updates"
+
+export DOTFILES_JAVA_VERSION="21-tem"
+export DOTFILES_JAVA_TOOLS="maven gradle kotlin"
+
+export DOTFILES_RUST_TOOLCHAIN="stable"
+export DOTFILES_RUST_CARGO_PACKAGES=""
+
+export DOTFILES_GO_TOOLS="golang.org/x/tools/gopls@latest mvdan.cc/gofumpt@latest golang.org/x/tools/cmd/goimports@latest github.com/go-delve/delve/cmd/dlv@latest"
+
+export DOTFILES_PYTHON_UV_TOOLS="ruff ipython"
+
+# Legacy runtime-only flags used by:
+#   bin/dot toolchains --runtimes
 export DOTFILES_INSTALL_RUSTUP=0
 export DOTFILES_INSTALL_NVM=0
 export DOTFILES_INSTALL_BUN=0
