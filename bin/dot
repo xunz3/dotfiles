@@ -19,20 +19,27 @@ Usage:
 	dot <command> [options]
 
 Commands:
+	init        Open the interactive guided setup
 	setup       Bootstrap, then run install
 	bootstrap   Symlink dotfiles into $HOME
 	install     Install packages and run topic installers
 	packages    Print the resolved package list for this machine
 	ssh         Initialize ~/.ssh permissions and baseline config
 	toolchains  Install or inspect the toolchain profile
-	update      Pull latest changes then run install
+	update      Pull latest changes, reconcile links, then run install
 	edit        Open the dotfiles directory in $EDITOR
 	help        Show this help message
 
 Common options:
+	init --dry-run        Review choices without running setup
+	setup --tui           Alias for the interactive guided setup
 	setup --backup       Back up conflicting dotfiles during bootstrap
 	setup --user         Skip system package installation
+	setup --cache-workspace DIR
+	                     Configure centralized caches under DIR/cache
 	install --user       Skip system package installation
+	install --cache-workspace DIR
+	                     Configure caches without running bootstrap
 	install --toolchains [profiles] Include selected toolchain profiles
 	packages --toolchains [profiles] Print selected toolchain package lists
 	toolchains list       Print available toolchain profiles
@@ -66,16 +73,46 @@ run_install() {
 	"$dotfiles_directory/script/install" "$@"
 }
 
+run_init() {
+	exec "$dotfiles_directory/script/setup-tui.sh" "$@"
+}
+
 run_setup() {
 	local bootstrap_args=()
 	local install_args=()
 	local passthrough_toolchain_profiles=false
+	local cache_workspace=''
+
+	if [[ "${1:-}" == "--tui" || "${1:-}" == "--interactive" ]]
+	then
+		shift
+		run_init "$@"
+	fi
 
 	while [[ $# -gt 0 ]]
 	do
 		case "$1" in
-			--backup|--force|--skip-gitconfig)
+			-b|--backup|-f|--force|-s|--skip|--skip-gitconfig)
 				bootstrap_args+=("$1")
+				;;
+			--force-path)
+				if [[ $# -lt 2 || -z "${2:-}" || "$2" != /* ]]
+				then
+					echo "--force-path requires an absolute managed target path" >&2
+					exit 1
+				fi
+				bootstrap_args+=("$1" "$2")
+				shift
+				;;
+			--cache-workspace)
+				if [[ $# -lt 2 || -z "${2:-}" || "$2" != /* ]]
+				then
+					echo "--cache-workspace requires an absolute WORKSPACE path" >&2
+					exit 1
+				fi
+				cache_workspace=$2
+				bootstrap_args+=("$1" "$2")
+				shift
 				;;
 			--user|--toolchains)
 				install_args+=("$1")
@@ -97,6 +134,10 @@ run_setup() {
 		shift
 	done
 
+	if [[ -n "$cache_workspace" ]]
+	then
+		"$dotfiles_directory/script/cache-env.sh" --validate "$cache_workspace"
+	fi
 	run_bootstrap "${bootstrap_args[@]}"
 	run_install "${install_args[@]}"
 }
@@ -143,6 +184,9 @@ if [[ $# -gt 0 ]]; then
 fi
 
 case "$command_name" in
+	init)
+		run_init "$@"
+		;;
 	setup)
 		run_setup "$@"
 		;;
@@ -163,6 +207,7 @@ case "$command_name" in
 		;;
 	update)
 		pull_latest
+		run_bootstrap --skip --skip-gitconfig
 		run_install "$@"
 		;;
 	edit)

@@ -9,8 +9,14 @@ DOTFILES_ROOT=$(pwd -P)
 print_only=false
 install_toolchains=0
 skip_packages=0
+cache_workspace=''
 toolchain_profiles=()
 resolved_toolchain_profiles=()
+package_manager=''
+package_total=0
+failed_packages=()
+succeeded_topics=()
+failed_topics=()
 
 info () {
 	printf "\r  [ \033[00;34m..\033[0m ] %s\n" "$1"
@@ -30,8 +36,10 @@ usage () {
 Usage: script/install [options]
 
 Options:
-  --print         print the package list for the current machine
+  --print          print the package list for the current machine
   --user           skip system package installation
+  --cache-workspace DIR
+                   configure centralized caches under DIR/cache
   --toolchains     include selected toolchain package lists and installers
   -h, --help        show this help text
 
@@ -42,6 +50,71 @@ EOF
 
 have_command () {
 	command -v "$1" >/dev/null 2>&1
+}
+
+load_cache_environment () {
+	local config_home="${XDG_CONFIG_HOME:-$HOME/.config}"
+	local cache_env_file=''
+	local cache_env_root cache_env_versions
+	local candidate candidate_name version_digits latest_name=''
+	local cache_env_marker='' cache_env_end='' line='' first_line=false
+
+	if [[ "$config_home" != /* ]]
+	then
+		config_home="$HOME/.config"
+	fi
+	cache_env_root="$config_home/dotfiles"
+	cache_env_versions="$cache_env_root/cache-env.d"
+
+	if [[ -d "$cache_env_versions" && ! -L "$cache_env_versions" ]]
+	then
+		for candidate in "$cache_env_versions"/v*.sh
+		do
+			[[ -e "$candidate" && ! -L "$candidate" && -f "$candidate" &&
+				-r "$candidate" ]] || continue
+			candidate_name=${candidate##*/}
+			version_digits=${candidate_name#v}
+			version_digits=${version_digits%.sh}
+			[[ ${#version_digits} -eq 18 &&
+				"$version_digits" != *[!0-9]* ]] || continue
+			cache_env_marker=''
+			cache_env_end=''
+			line=''
+			first_line=true
+			while IFS= read -r line || [[ -n "$line" ]]
+			do
+				if [[ "$first_line" == "true" ]]
+				then
+					cache_env_marker=$line
+					first_line=false
+				fi
+				cache_env_end=$line
+			done < "$candidate"
+			[[ "$cache_env_marker" == '# Managed by dotfiles script/cache-env.sh.' &&
+				"$cache_env_end" == '# End managed dotfiles cache environment.' ]] ||
+				continue
+			if [[ -z "$latest_name" || "$candidate_name" > "$latest_name" ]]
+			then
+				latest_name=$candidate_name
+				cache_env_file=$candidate
+			fi
+		done
+	fi
+
+	if [[ -z "$cache_env_file" ]]
+	then
+		cache_env_file="$cache_env_root/cache-env.sh"
+		if [[ -L "$cache_env_file" || ! -f "$cache_env_file" ||
+			! -r "$cache_env_file" ]] ||
+			! IFS= read -r cache_env_marker < "$cache_env_file" ||
+			[[ "$cache_env_marker" != '# Managed by dotfiles script/cache-env.sh.' ]]
+		then
+			return
+		fi
+	fi
+
+	# shellcheck source=/dev/null
+	source "$cache_env_file"
 }
 
 run_as_root () {
@@ -125,22 +198,32 @@ print_packages () {
 install_linux_packages () {
 	local manager=''
 	local -a packages
+
+	if [[ "$skip_packages" == "1" ]]
+	then
+		if [[ "$print_only" == "true" ]]
+		then
+			printf 'package manager: skipped\n'
+			printf 'profile: user-only\n'
+			printf '(system packages skipped)\n'
+		else
+			info 'skipping package installation for user-only mode'
+		fi
+		return 0
+	fi
+
 	if ! manager="$(detect_package_manager)"
 	then
 		fail 'no supported package manager found (apt-get, dnf, pacman, zypper)'
 	fi
+	package_manager="$manager"
 
 	mapfile -t packages < <(resolve_packages "$manager")
+	package_total=${#packages[@]}
 
 	if [[ "$print_only" == "true" ]]
 	then
 		print_packages "$manager" "${packages[@]}"
-		return
-	fi
-
-	if [[ "$skip_packages" == "1" ]]
-	then
-		info 'skipping package installation for user-only mode'
 		return
 	fi
 
@@ -166,7 +249,12 @@ install_linux_packages () {
 	fi
 
 	info 'bulk package installation failed; retrying one package at a time'
-	retry_packages_individually "$manager" "${packages[@]}"
+	if retry_packages_individually "$manager" "${packages[@]}"
+	then
+		return 0
+	fi
+
+	return 1
 }
 
 install_package_batch () {
@@ -233,6 +321,8 @@ retry_packages_individually () {
 
 	info "packages not installed: ${failed[*]}"
 	info 'continuing with topic installers'
+	failed_packages+=("${failed[@]}")
+	return 1
 }
 
 run_topic_installer () {
@@ -247,6 +337,20 @@ run_topic_installer () {
 	fi
 
 	info "$label failed; continuing with remaining installers"
+	return 1
+}
+
+record_topic_installer () {
+	local installer=$1
+	shift
+	local label="${installer#"$DOTFILES_ROOT/"}"
+
+	if run_topic_installer "$installer" "$@"
+	then
+		succeeded_topics+=("$label")
+	else
+		failed_topics+=("$label")
+	fi
 }
 
 is_ordered_topic_installer () {
@@ -266,20 +370,58 @@ run_topic_installers () {
 	for topic in ssh zsh vim nvim
 	do
 		installer="$DOTFILES_ROOT/$topic/install.sh"
-		[[ -f "$installer" ]] && run_topic_installer "$installer"
+		if [[ -f "$installer" ]]
+		then
+			record_topic_installer "$installer"
+		fi
 	done
 
 	if [[ "$install_toolchains" == "1" ]]
 	then
 		installer="$DOTFILES_ROOT/toolchains/install.sh"
-		[[ -f "$installer" ]] && run_topic_installer "$installer" "${resolved_toolchain_profiles[@]}"
+		if [[ -f "$installer" ]]
+		then
+			record_topic_installer "$installer" "${resolved_toolchain_profiles[@]}"
+		fi
 	fi
 
 	while IFS= read -r -d '' installer
 	do
 		is_ordered_topic_installer "$installer" && continue
-		run_topic_installer "$installer"
+		record_topic_installer "$installer"
 	done < <(find "$DOTFILES_ROOT" -mindepth 2 -maxdepth 2 -name install.sh -print0 | sort -z)
+
+	[[ ${#failed_topics[@]} -eq 0 ]]
+}
+
+print_install_summary () {
+	local package_succeeded=$((package_total - ${#failed_packages[@]}))
+	local item
+
+	printf '\nInstallation summary\n'
+	if [[ "$skip_packages" == "1" ]]
+	then
+		printf '  packages: skipped (user-only mode)\n'
+	else
+		printf '  packages: %d succeeded, %d failed (%s)\n' \
+			"$package_succeeded" "${#failed_packages[@]}" "${package_manager:-unknown}"
+	fi
+	printf '  topics:   %d succeeded, %d failed\n' "${#succeeded_topics[@]}" "${#failed_topics[@]}"
+
+	if [[ ${#failed_packages[@]} -eq 0 && ${#failed_topics[@]} -eq 0 ]]
+	then
+		return
+	fi
+
+	printf '\nFailed:\n'
+	for item in "${failed_packages[@]}"
+	do
+		printf '  package: %s\n' "$item"
+	done
+	for item in "${failed_topics[@]}"
+	do
+		printf '  topic: %s\n' "$item"
+	done
 }
 
 while [[ $# -gt 0 ]]
@@ -290,6 +432,14 @@ do
 			;;
 		--user)
 			skip_packages=1
+			;;
+		--cache-workspace)
+			if [[ $# -lt 2 || -z "${2:-}" || "$2" != /* ]]
+			then
+				fail '--cache-workspace requires an absolute WORKSPACE path'
+			fi
+			cache_workspace=$2
+			shift
 			;;
 		--toolchains)
 			install_toolchains=1
@@ -310,6 +460,22 @@ do
 	shift
 done
 
+if [[ "$print_only" == "true" && -n "$cache_workspace" ]]
+then
+	fail '--cache-workspace cannot be combined with --print'
+fi
+
+if [[ -n "$cache_workspace" ]]
+then
+	"$DOTFILES_ROOT/script/cache-env.sh" --validate "$cache_workspace"
+	"$DOTFILES_ROOT/script/cache-env.sh" "$cache_workspace"
+fi
+
+if [[ "$print_only" != "true" ]]
+then
+	load_cache_environment
+fi
+
 if [[ "$install_toolchains" == "1" ]]
 then
 	# shellcheck source=toolchains/lib/profiles.sh
@@ -329,9 +495,14 @@ then
 	done
 fi
 
+overall_status=0
+
 case "$(uname -s)" in
 	Linux)
-		install_linux_packages
+		if ! install_linux_packages
+		then
+			overall_status=1
+		fi
 		;;
 	*)
 		fail "unsupported operating system: $(uname -s) (this repo is Linux-only)"
@@ -343,4 +514,10 @@ then
 	exit 0
 fi
 
-run_topic_installers
+if ! run_topic_installers
+then
+	overall_status=1
+fi
+
+print_install_summary
+exit "$overall_status"

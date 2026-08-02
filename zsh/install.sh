@@ -26,7 +26,7 @@ clone_repo_if_missing () {
 	if [[ -e "$target_dir" ]]
 	then
 		info "$target_dir exists and is not a git checkout; skipping $label"
-		return
+		return 1
 	fi
 
 	mkdir -p "$(dirname "$target_dir")"
@@ -36,23 +36,27 @@ clone_repo_if_missing () {
 		success "installed $label"
 	else
 		info "failed to install $label; run zsh/install.sh again after network is available"
+		return 1
 	fi
 }
 
 if ! command -v git >/dev/null 2>&1
 then
-	info 'git is required to install oh-my-zsh; skipping'
-	exit 0
+	info 'git is required to install oh-my-zsh'
+	exit 1
 fi
 
 ZSH_DIR="${ZSH:-$HOME/.oh-my-zsh}"
 ZSH_CUSTOM_DIR="${ZSH_CUSTOM:-$ZSH_DIR/custom}"
+install_status=0
 
-clone_repo_if_missing "https://github.com/ohmyzsh/ohmyzsh.git" "$ZSH_DIR" "oh-my-zsh"
-clone_repo_if_missing "https://github.com/zsh-users/zsh-autosuggestions" "$ZSH_CUSTOM_DIR/plugins/zsh-autosuggestions" "zsh-autosuggestions"
-clone_repo_if_missing "https://github.com/zsh-users/zsh-syntax-highlighting.git" "$ZSH_CUSTOM_DIR/plugins/zsh-syntax-highlighting" "zsh-syntax-highlighting"
+clone_repo_if_missing "https://github.com/ohmyzsh/ohmyzsh.git" "$ZSH_DIR" "oh-my-zsh" || install_status=1
+clone_repo_if_missing "https://github.com/zsh-users/zsh-autosuggestions" "$ZSH_CUSTOM_DIR/plugins/zsh-autosuggestions" "zsh-autosuggestions" || install_status=1
+clone_repo_if_missing "https://github.com/zsh-users/zsh-syntax-highlighting.git" "$ZSH_CUSTOM_DIR/plugins/zsh-syntax-highlighting" "zsh-syntax-highlighting" || install_status=1
 
 if command -v zsh >/dev/null 2>&1 && [[ "${SHELL:-}" != "$(command -v zsh)" ]]
 then
 	info "current login shell is ${SHELL:-unknown}; run 'chsh -s $(command -v zsh)' if you want zsh by default"
 fi
+
+exit "$install_status"

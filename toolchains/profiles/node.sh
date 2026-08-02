@@ -16,23 +16,23 @@ profile_node () {
 	info "installing Node.js $node_version"
 	case "$node_version" in
 		lts|lts/*)
-			nvm install --lts
-			nvm alias default 'lts/*'
+			nvm install --lts || return 1
+			nvm alias default 'lts/*' || return 1
 			;;
 		*)
-			nvm install "$node_version"
-			nvm alias default "$node_version"
+			nvm install "$node_version" || return 1
+			nvm alias default "$node_version" || return 1
 			;;
 	esac
-	nvm use default
+	nvm use default || return 1
 	success 'Node.js is ready'
 
 	if have_command corepack
 	then
 		info 'enabling Corepack package managers'
-		corepack enable
-		corepack prepare "pnpm@$pnpm_version" --activate
-		corepack prepare "yarn@$yarn_version" --activate
+		corepack enable || return 1
+		corepack prepare "pnpm@$pnpm_version" --activate || return 1
+		corepack prepare "yarn@$yarn_version" --activate || return 1
 		success 'Corepack package managers are ready'
 	fi
 
@@ -40,7 +40,7 @@ profile_node () {
 	then
 		read -r -a package_list <<< "$global_packages"
 		info "installing npm globals: ${package_list[*]}"
-		npm install -g "${package_list[@]}"
+		npm install -g "${package_list[@]}" || return 1
 		success 'installed npm global packages'
 	fi
 }

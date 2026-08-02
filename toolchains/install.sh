@@ -59,7 +59,11 @@ run_profile () {
 	fi
 
 	# shellcheck source=/dev/null
-	source "$profile_file"
+	if ! source "$profile_file"
+	then
+		info "failed to load toolchain profile: $profile"
+		return 1
+	fi
 
 	if ! declare -F "$profile_function" >/dev/null
 	then
@@ -75,6 +79,7 @@ run_profiles () {
 	local requested=("$@")
 	local profiles=()
 	local profile
+	local succeeded=()
 	local failed=()
 
 	load_toolchain_config
@@ -91,16 +96,26 @@ run_profiles () {
 		if run_profile "$profile"
 		then
 			success "toolchain profile complete: $profile"
+			succeeded+=("$profile")
 		else
 			failed+=("$profile")
 		fi
 	done
 
+	printf '\nToolchain summary\n'
+	printf '  profiles: %d succeeded, %d failed\n' "${#succeeded[@]}" "${#failed[@]}"
+
 	if [[ ${#failed[@]} -gt 0 ]]
 	then
-		info "toolchain profiles failed: ${failed[*]}"
+		printf '\nFailed profiles:\n'
+		for profile in "${failed[@]}"
+		do
+			printf '  profile: %s\n' "$profile"
+		done
 		return 1
 	fi
+
+	return 0
 }
 
 case "${1:-}" in

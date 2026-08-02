@@ -14,8 +14,8 @@ success () {
 
 if ! command -v curl >/dev/null 2>&1
 then
-	info 'curl is required to install vim-plug; skipping'
-	exit 0
+	info 'curl is required to install vim-plug'
+	exit 1
 fi
 
 plug_path="${HOME}/.vim/autoload/plug.vim"
@@ -32,8 +32,8 @@ fi
 
 if ! command -v vim >/dev/null 2>&1
 then
-	info 'vim is not installed yet; skipping plugin install'
-	exit 0
+	info 'vim is not installed yet; cannot install plugins'
+	exit 1
 fi
 
 info 'installing Vim plugins'

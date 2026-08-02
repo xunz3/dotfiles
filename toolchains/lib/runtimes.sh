@@ -8,7 +8,7 @@ install_rustup () {
 	fi
 
 	info 'installing rustup'
-	run_remote_script "https://sh.rustup.rs" sh -s -- -y
+	run_remote_script "https://sh.rustup.rs" sh -s -- -y || return 1
 	success 'installed rustup'
 }
 
@@ -16,7 +16,11 @@ source_cargo () {
 	if [[ -s "$HOME/.cargo/env" ]]
 	then
 		set +u
-		source "$HOME/.cargo/env"
+		if ! source "$HOME/.cargo/env"
+		then
+			set -u
+			return 1
+		fi
 		set -u
 	fi
 	have_command rustup
@@ -44,7 +48,7 @@ install_nvm () {
 	fi
 
 	info 'cloning nvm'
-	git clone --depth=1 https://github.com/nvm-sh/nvm.git "$target_dir"
+	git clone --depth=1 https://github.com/nvm-sh/nvm.git "$target_dir" || return 1
 	success 'installed nvm'
 }
 
@@ -54,8 +58,13 @@ source_nvm () {
 
 	# shellcheck source=/dev/null
 	set +u
-	source "$NVM_DIR/nvm.sh"
+	if ! source "$NVM_DIR/nvm.sh"
+	then
+		set -u
+		return 1
+	fi
 	set -u
+	have_command nvm
 }
 
 install_bun_runtime () {
@@ -66,7 +75,7 @@ install_bun_runtime () {
 	fi
 
 	info 'installing bun'
-	run_remote_script "https://bun.sh/install" bash
+	run_remote_script "https://bun.sh/install" bash || return 1
 	success 'installed bun'
 }
 
@@ -87,7 +96,7 @@ install_sdkman () {
 
 	info 'installing sdkman'
 	export SDKMAN_DIR="$sdkman_dir"
-	run_remote_script "https://get.sdkman.io" bash
+	run_remote_script "https://get.sdkman.io" bash || return 1
 	success 'installed sdkman'
 }
 
@@ -99,6 +108,11 @@ source_sdkman () {
 	export SDKMAN_SELFUPDATE="${SDKMAN_SELFUPDATE:-false}"
 	# shellcheck source=/dev/null
 	set +u
-	source "$SDKMAN_DIR/bin/sdkman-init.sh"
+	if ! source "$SDKMAN_DIR/bin/sdkman-init.sh"
+	then
+		set -u
+		return 1
+	fi
 	set -u
+	have_command sdk
 }

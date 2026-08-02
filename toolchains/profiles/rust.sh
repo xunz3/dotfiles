@@ -12,9 +12,9 @@ profile_rust () {
 	}
 
 	info "installing Rust toolchain: $rust_toolchain"
-	rustup toolchain install "$rust_toolchain"
-	rustup default "$rust_toolchain"
-	rustup component add rustfmt clippy
+	rustup toolchain install "$rust_toolchain" || return 1
+	rustup default "$rust_toolchain" || return 1
+	rustup component add rustfmt clippy || return 1
 	success 'Rust toolchain is ready'
 
 	if [[ -n "$cargo_packages" ]]
@@ -23,7 +23,7 @@ profile_rust () {
 		for package in "${package_list[@]}"
 		do
 			info "installing cargo tool: $package"
-			cargo install "$package"
+			cargo install "$package" || return 1
 		done
 	fi
 }

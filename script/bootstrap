@@ -31,6 +31,11 @@ overwrite_all=false
 backup_all=false
 skip_all=false
 skip_gitconfig=false
+cache_workspace=''
+backup_dir=''
+backup_manifest=''
+backup_state_root=''
+force_paths=()
 
 while [[ $# -gt 0 ]]
 do
@@ -47,15 +52,34 @@ do
     --skip-gitconfig)
       skip_gitconfig=true
       ;;
+    --force-path)
+      if [[ $# -lt 2 || -z "${2:-}" || "$2" != /* ]]
+      then
+        fail '--force-path requires an absolute managed target path'
+      fi
+      force_paths+=("$2")
+      shift
+      ;;
+    --cache-workspace)
+      if [[ $# -lt 2 || -z "${2:-}" || "$2" != /* ]]
+      then
+        fail '--cache-workspace requires an absolute WORKSPACE path'
+      fi
+      cache_workspace=$2
+      shift
+      ;;
     -h|--help)
       cat <<'EOF'
 Usage: script/bootstrap [options]
 
 Options:
   -f, --force          overwrite existing files
-  -b, --backup         back up existing files to *.backup
+  -b, --backup         back up conflicts under the dotfiles state directory
   -s, --skip           skip existing files
+      --force-path PATH overwrite only this managed target (repeatable)
       --skip-gitconfig do not create ~/.gitconfig.local
+      --cache-workspace DIR
+                       configure centralized caches under DIR/cache
   -h, --help           show this help text
 EOF
       exit 0
@@ -67,6 +91,132 @@ EOF
   shift
 done
 
+resolve_backup_state_root () {
+  local state_root="${XDG_STATE_HOME:-$HOME/.local/state}"
+
+  if [[ -z "$state_root" || "$state_root" != /* ]]
+  then
+    fail 'XDG_STATE_HOME must be an absolute path when set'
+  fi
+  if [[ "$state_root" =~ [[:cntrl:]] ]]
+  then
+    fail 'XDG_STATE_HOME must not contain control characters'
+  fi
+  if ! state_root="$(realpath -m -- "$state_root")"
+  then
+    fail 'could not resolve XDG_STATE_HOME'
+  fi
+  if [[ "$state_root" == "/" ]]
+  then
+    fail 'XDG_STATE_HOME cannot resolve to /'
+  fi
+
+  backup_state_root=$state_root
+}
+
+conflict_mode_count=0
+[[ "$overwrite_all" == "true" ]] && conflict_mode_count=$((conflict_mode_count + 1))
+[[ "$backup_all" == "true" ]] && conflict_mode_count=$((conflict_mode_count + 1))
+[[ "$skip_all" == "true" ]] && conflict_mode_count=$((conflict_mode_count + 1))
+if [[ "$conflict_mode_count" -gt 1 ]]
+then
+  fail '--force, --backup, and --skip are mutually exclusive'
+fi
+if [[ ${#force_paths[@]} -gt 0 && "$conflict_mode_count" -gt 0 ]]
+then
+  fail '--force-path cannot be combined with --force, --backup, or --skip'
+fi
+if [[ "$backup_all" == "true" ]]
+then
+  resolve_backup_state_root
+fi
+if [[ -n "$cache_workspace" ]]
+then
+  "$DOTFILES_ROOT/script/cache-env.sh" --validate "$cache_workspace"
+fi
+
+path_exists () {
+  [[ -e "$1" || -L "$1" ]]
+}
+
+path_type () {
+  local path=$1
+
+  if [[ -L "$path" ]]
+  then
+    printf 'symlink'
+  elif [[ -d "$path" ]]
+  then
+    printf 'directory'
+  elif [[ -f "$path" ]]
+  then
+    printf 'file'
+  else
+    printf 'other'
+  fi
+}
+
+path_is_confirmed_for_overwrite () {
+  local target=$1 confirmed_path
+
+  for confirmed_path in "${force_paths[@]}"
+  do
+    [[ "$confirmed_path" == "$target" ]] && return 0
+  done
+
+  return 1
+}
+
+ensure_backup_directory () {
+  local backup_root backup_id candidate suffix=0
+
+  if [[ -n "$backup_dir" ]]
+  then
+    return
+  fi
+
+  if [[ -z "$backup_state_root" ]]
+  then
+    resolve_backup_state_root
+  fi
+  backup_root="$backup_state_root/dotfiles/backups"
+  backup_id="$(date -u '+%Y%m%dT%H%M%SZ')-$$"
+  mkdir -p "$backup_root"
+  chmod 700 "$backup_state_root/dotfiles" "$backup_root"
+
+  candidate="$backup_root/$backup_id"
+  while ! mkdir -m 700 "$candidate" 2>/dev/null
+  do
+    suffix=$((suffix + 1))
+    candidate="$backup_root/$backup_id-$suffix"
+  done
+
+  backup_dir="$candidate"
+  backup_manifest="$backup_dir/manifest.tsv"
+  printf 'original_path\tbackup_path\ttype\tbacked_up_at_utc\n' > "$backup_manifest"
+  chmod 600 "$backup_manifest"
+}
+
+backup_target () {
+  local dst=$1 relative_path backup_path target_type backed_up_at
+
+  ensure_backup_directory
+  relative_path="${dst#"$HOME"/}"
+  backup_path="$backup_dir/$relative_path"
+
+  if path_exists "$backup_path"
+  then
+    fail "backup target already exists: $backup_path"
+  fi
+
+  mkdir -p "$(dirname "$backup_path")"
+  target_type="$(path_type "$dst")"
+  backed_up_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  mv -- "$dst" "$backup_path"
+  printf '%s\t%s\t%s\t%s\n' "$dst" "$backup_path" "$target_type" "$backed_up_at" >> "$backup_manifest"
+  success "moved $dst to $backup_path"
+}
+
 setup_gitconfig () {
   if [[ "$skip_gitconfig" == "true" ]]
   then
@@ -74,52 +224,91 @@ setup_gitconfig () {
     return
   fi
 
-  if [[ ! -f "$HOME/.gitconfig.local" ]]
+  if path_exists "$HOME/.gitconfig.local"
   then
-    info 'setup gitconfig'
-
-    local git_authorname="${DOTFILES_GIT_AUTHORNAME:-}"
-    local git_authoremail="${DOTFILES_GIT_AUTHOREMAIL:-}"
-    local git_credential="${DOTFILES_GIT_CREDENTIAL_HELPER:-cache}"
-    local template
-
-    if [[ -z "$git_authorname" || -z "$git_authoremail" ]]
+    if [[ ! -f "$HOME/.gitconfig.local" ]]
     then
-      if [[ ! -t 0 ]]
-      then
-        info 'skipping gitconfig setup; set DOTFILES_GIT_AUTHORNAME and DOTFILES_GIT_AUTHOREMAIL or rerun interactively'
-        return
-      fi
-
-      user ' - What is your github author name?'
-      read -r -e git_authorname
-      user ' - What is your github author email?'
-      read -r -e git_authoremail
+      info '~/.gitconfig.local exists but is not a regular file; leaving it unchanged'
     fi
+    return
+  fi
 
-    if [[ -z "$git_authorname" || -z "$git_authoremail" ]]
+  info 'setup gitconfig'
+
+  local git_authorname="${DOTFILES_GIT_AUTHORNAME:-}"
+  local git_authoremail="${DOTFILES_GIT_AUTHOREMAIL:-}"
+  local git_credential="${DOTFILES_GIT_CREDENTIAL_HELPER:-cache}"
+  local temporary_gitconfig=''
+
+  if [[ -z "$git_authorname" || -z "$git_authoremail" ]]
+  then
+    if [[ ! -t 0 ]]
     then
-      info 'git author name or email was empty; skipping gitconfig setup'
+      info 'skipping gitconfig setup; set DOTFILES_GIT_AUTHORNAME and DOTFILES_GIT_AUTHOREMAIL or rerun interactively'
       return
     fi
 
-    template="$(< git/gitconfig.local.symlink.example)"
-    template="${template//AUTHORNAME/$git_authorname}"
-    template="${template//AUTHOREMAIL/$git_authoremail}"
-    template="${template//GIT_CREDENTIAL_HELPER/$git_credential}"
-    printf '%s\n' "$template" > "$HOME/.gitconfig.local"
-    chmod 600 "$HOME/.gitconfig.local"
-
-    success 'created ~/.gitconfig.local'
+    user ' - What is your github author name?'
+    read -r -e git_authorname
+    user ' - What is your github author email?'
+    read -r -e git_authoremail
   fi
+
+  if [[ -z "$git_authorname" || -z "$git_authoremail" ]]
+  then
+    info 'git author name or email was empty; skipping gitconfig setup'
+    return
+  fi
+
+  if ! command -v git >/dev/null 2>&1
+  then
+    fail 'git is required to create ~/.gitconfig.local'
+  fi
+
+  temporary_gitconfig="$(mktemp "$HOME/.gitconfig.local.XXXXXX")"
+  if ! cp "$DOTFILES_ROOT/git/gitconfig.local.symlink.example" "$temporary_gitconfig"
+  then
+    rm -f -- "$temporary_gitconfig"
+    fail 'could not read the local gitconfig template'
+  fi
+  chmod 600 "$temporary_gitconfig"
+  if ! git config --file "$temporary_gitconfig" --replace-all user.name "$git_authorname" ||
+    ! git config --file "$temporary_gitconfig" --replace-all user.email "$git_authoremail" ||
+    ! git config --file "$temporary_gitconfig" --replace-all credential.helper "$git_credential"
+  then
+    rm -f -- "$temporary_gitconfig"
+    fail 'could not create ~/.gitconfig.local'
+  fi
+  if ! ln -T -- "$temporary_gitconfig" "$HOME/.gitconfig.local" 2>/dev/null
+  then
+    rm -f -- "$temporary_gitconfig"
+    if path_exists "$HOME/.gitconfig.local"
+    then
+      info '~/.gitconfig.local appeared while it was being created; leaving it unchanged'
+      return
+    fi
+    fail 'could not create ~/.gitconfig.local without overwriting an existing path'
+  fi
+  rm -f -- "$temporary_gitconfig"
+
+  success 'created ~/.gitconfig.local'
 }
 
 setup_local_template () {
   local example_file=$1
   local target_file=$2
 
-  if [[ ! -f "$example_file" || -e "$target_file" ]]
+  if [[ ! -f "$example_file" ]]
   then
+    return
+  fi
+
+  if path_exists "$target_file"
+  then
+    if [[ ! -f "$target_file" ]]
+    then
+      info "${target_file/#$HOME/~} exists but is not a regular file; leaving it unchanged"
+    fi
     return
   fi
 
@@ -152,8 +341,8 @@ setup_dotfiles_alias () {
     return
   fi
 
-  rm -f "$target"
-  ln -s "$DOTFILES_ROOT" "$target"
+  rm -f -- "$target"
+  ln -sT -- "$DOTFILES_ROOT" "$target"
   success "linked $target to $DOTFILES_ROOT"
 }
 
@@ -166,8 +355,13 @@ link_file () {
 
   if [[ -e "$dst" || -L "$dst" ]]
   then
+    if path_is_confirmed_for_overwrite "$dst"
+    then
+      overwrite=true
+    fi
 
-    if [[ "$overwrite_all" == "false" && "$backup_all" == "false" && "$skip_all" == "false" ]]
+    if [[ "$overwrite" != "true" && "$overwrite_all" == "false" &&
+      "$backup_all" == "false" && "$skip_all" == "false" ]]
     then
 
       local currentSrc=''
@@ -220,8 +414,7 @@ link_file () {
 
     if [[ "$backup" == "true" ]]
     then
-      mv "$dst" "${dst}.backup"
-      success "moved $dst to ${dst}.backup"
+      backup_target "$dst"
     fi
 
     if [[ "$skip" == "true" ]]
@@ -233,7 +426,7 @@ link_file () {
   if [[ "$skip" != "true" ]]
   then
     mkdir -p "$(dirname "$dst")"
-    ln -s "$src" "$dst"
+    ln -sT "$src" "$dst"
     success "linked $src to $dst"
   fi
 }
@@ -241,31 +434,40 @@ link_file () {
 install_home_dotfiles () {
   info 'installing top-level dotfiles'
 
-  find -H "$DOTFILES_ROOT" -maxdepth 2 -name '*.symlink' -not -name 'gitconfig.local.symlink' -not -path '*.git*' -print0 | while IFS= read -r -d '' src
+  while IFS= read -r -d '' src
   do
     dst="$HOME/.$(basename "${src%.*}")"
     link_file "$src" "$dst"
-  done
+  done < <(find -H "$DOTFILES_ROOT" -maxdepth 2 -name '*.symlink' -not -name 'gitconfig.local.symlink' -not -path '*.git*' -print0)
 }
 
 install_xdg_config () {
   info 'installing XDG config'
 
-  find -H "$DOTFILES_ROOT" -mindepth 3 -maxdepth 3 -path '*/config/*' -not -path '*.git*' -print0 | while IFS= read -r -d '' src
+  while IFS= read -r -d '' src
   do
     local rel_path
     rel_path="${src#"$DOTFILES_ROOT"/}"
     rel_path="${rel_path#*/config/}"
     dst="$HOME/.config/$rel_path"
     link_file "$src" "$dst"
-  done
+  done < <(find -H "$DOTFILES_ROOT" -mindepth 3 -maxdepth 3 -path '*/config/*' -not -path '*.git*' -print0)
 }
 
 setup_dotfiles_alias
 setup_gitconfig
 setup_local_files
+if [[ -n "$cache_workspace" ]]
+then
+  "$DOTFILES_ROOT/script/cache-env.sh" "$cache_workspace"
+fi
 install_home_dotfiles
 install_xdg_config
+
+if [[ -n "$backup_dir" ]]
+then
+  info "backup manifest: $backup_manifest"
+fi
 
 echo ''
 echo '  All installed!'

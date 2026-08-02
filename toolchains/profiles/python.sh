@@ -3,6 +3,7 @@
 profile_python () {
 	local uv_tools="${DOTFILES_PYTHON_UV_TOOLS:-ruff ipython}"
 	local tool
+	local failed=()
 
 	if ! have_command uv
 	then
@@ -13,7 +14,11 @@ profile_python () {
 	if [[ -s "$HOME/.local/bin/env" ]]
 	then
 		set +u
-		source "$HOME/.local/bin/env"
+		if ! source "$HOME/.local/bin/env"
+		then
+			set -u
+			return 1
+		fi
 		set -u
 	fi
 	prepend_path_if_dir "$HOME/.local/bin"
@@ -27,7 +32,17 @@ profile_python () {
 	for tool in $uv_tools
 	do
 		info "installing Python tool with uv: $tool"
-		uv tool install "$tool"
+		if ! uv tool install "$tool"
+		then
+			failed+=("$tool")
+		fi
 	done
+
+	if [[ ${#failed[@]} -gt 0 ]]
+	then
+		info "Python tools failed: ${failed[*]}"
+		return 1
+	fi
+
 	success 'Python tools are ready'
 }
