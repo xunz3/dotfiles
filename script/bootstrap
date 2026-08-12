@@ -132,7 +132,7 @@ then
 fi
 if [[ -n "$cache_workspace" ]]
 then
-  "$DOTFILES_ROOT/script/cache-env.sh" --validate "$cache_workspace"
+  "$DOTFILES_ROOT/script/cache-env.sh" "$cache_workspace"
 fi
 
 path_exists () {
@@ -457,10 +457,6 @@ install_xdg_config () {
 setup_dotfiles_alias
 setup_gitconfig
 setup_local_files
-if [[ -n "$cache_workspace" ]]
-then
-  "$DOTFILES_ROOT/script/cache-env.sh" "$cache_workspace"
-fi
 install_home_dotfiles
 install_xdg_config
 

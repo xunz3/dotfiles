@@ -23,7 +23,7 @@ exec zsh
 
 `bin/dot init` opens the guided terminal setup. It previews the machine, then lets you choose package scope, conflict handling, a cache workspace, Git identity, and toolchain profiles. Nothing is changed until the final confirmation, where the equivalent `bin/dot setup ...` command is shown.
 
-The TUI is implemented in Bash and has no pre-install dependency on Python, `dialog`, `whiptail`, or `gum`. Use arrow keys or `j`/`k` to move, Space to toggle toolchains, Enter to continue, `b` to go back, and `q` to quit. Choosing overwrite lists the conflicting paths, requires typing `OVERWRITE`, and authorizes only those exact targets. `bin/dot init --dry-run` walks through the same choices without executing setup; `bin/dot setup --tui` is an alias.
+The TUI is implemented in Bash and has no pre-install dependency on Python, `dialog`, `whiptail`, or `gum`. Use arrow keys or `j`/`k` to move, Space to toggle toolchains, Enter to continue, `b` to go back, and `q` to quit. Choosing overwrite lists the conflicting paths, requires typing `OVERWRITE`, and authorizes only those exact targets. `bin/dot init --dry-run` walks through the same choices without executing setup; `bin/dot setup --tui` is an alias. `--user` can appear before or after `--tui` to preselect user-only mode.
 
 For scripts, remote provisioning, and other non-interactive environments, the existing CLI remains available:
 
@@ -63,6 +63,7 @@ bin/dot init              # interactive guided setup
 bin/dot init --dry-run    # review TUI choices without installing
 bin/dot setup             # bootstrap + package install
 bin/dot setup --tui       # alias for the guided setup
+bin/dot setup --user --tui # guided setup with user-only preselected
 bin/dot setup --backup    # bootstrap with backups + package install
 bin/dot setup --user      # bootstrap and skip system packages
 bin/dot setup --cache-workspace /data4/zhangxun # configure centralized caches
@@ -105,7 +106,7 @@ The profile configures:
 
 Because `HF_HOME` normally also contains authentication state, the generated profile sets `HF_TOKEN_PATH` to `${XDG_CONFIG_HOME:-~/.config}/huggingface/token`, outside the disposable cache tree.
 
-The workspace must be an absolute path other than `/`; it is resolved before use so `..` and symbolic links cannot bypass the root-directory guard. `XDG_CONFIG_HOME`, when set, must also be absolute. Paths with spaces and shell metacharacters are quoted safely. Re-running the command appends a complete profile version, creates the new tree, and leaves both prior profiles and the old cache tree in place. It never overwrites an unrelated file or symbolic link at the compatibility path.
+The workspace must be an absolute path other than `/`; it is resolved before use so `..` and symbolic links cannot bypass the root-directory guard. `XDG_CONFIG_HOME`, when set, must also be absolute. Paths with spaces and shell metacharacters are quoted safely. A new immutable profile is published only when its generated content changes, so repeating the same setup does not accumulate duplicate versions. Changing the workspace creates a new tree and leaves prior profiles and cache data in place. It never overwrites an unrelated file or symbolic link at the compatibility path.
 
 `TMPDIR`, Torch extensions, Triton, and uv can be sensitive to mount behavior. Prefer a local, writable filesystem; a `noexec` or slow network mount can break compiled extensions or reduce cache performance. If the configured `tmp` directory later disappears or becomes unwritable, new shells stop exporting that `TMPDIR` and fall back to the system default.
 
@@ -160,7 +161,7 @@ The Neovim toolchain profile aims to cover a broad mainstream baseline:
 - backend and systems: Python, Go, Rust, Java, PHP, Ruby, C/C++, Bash, Zig
 - infra and data: Docker, Terraform, SQL, JSON, YAML, TOML, XML, Markdown
 
-Neovim is installed from the official release tarball instead of the distro package. By default the repo pins `v0.11.5` and its architecture-specific SHA-256 through `nvim/install.sh`. Every install reconciles `neovim-current` with the requested version, so changing the target selects or installs that version even when an older `~/.local/bin/nvim` already exists.
+Neovim is installed from the official release tarball instead of the distro package. By default the repo pins `v0.11.5` and its architecture-specific SHA-256 through `nvim/install.sh`. Every install reconciles dotfiles-managed Neovim links with the requested version. An unrelated custom `~/.local/bin/nvim` symlink is left unchanged and reported instead of being silently replaced.
 
 For a version not already pinned in the script, provide both the version and the official SHA-256 for the current architecture:
 

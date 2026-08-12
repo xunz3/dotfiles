@@ -467,7 +467,6 @@ fi
 
 if [[ -n "$cache_workspace" ]]
 then
-	"$DOTFILES_ROOT/script/cache-env.sh" --validate "$cache_workspace"
 	"$DOTFILES_ROOT/script/cache-env.sh" "$cache_workspace"
 fi
 

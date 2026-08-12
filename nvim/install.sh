@@ -12,19 +12,63 @@ success () {
 	printf "\r\033[2K  [ \033[00;32mOK\033[0m ] %s\n" "$1"
 }
 
-replace_managed_symlink () {
+symlink_target_is_managed () {
+	local existing_target=$1 managed_pattern
+	shift
+
+	for managed_pattern in "$@"
+	do
+		[[ "$existing_target" == $managed_pattern ]] && return 0
+	done
+	return 1
+}
+
+managed_symlink_is_replaceable () {
 	local target=$1
 	local link_path=$2
-	local temporary_link="${link_path}.tmp.$$"
+	local existing_target
+	shift 2
 
-	if [[ -e "$link_path" && ! -L "$link_path" ]]
+	if [[ ! -e "$link_path" && ! -L "$link_path" ]]
+	then
+		return 0
+	fi
+
+	if [[ ! -L "$link_path" ]]
 	then
 		info "$link_path exists and is not a symlink; leaving it unchanged"
 		return 1
 	fi
 
-	ln -s "$target" "$temporary_link" || return 1
-	mv -Tf "$temporary_link" "$link_path" || return 1
+	existing_target="$(readlink -- "$link_path")" || return 1
+	if [[ "$existing_target" == "$target" ]] ||
+		symlink_target_is_managed "$existing_target" "$@"
+	then
+		return 0
+	fi
+
+	info "$link_path points to an unmanaged target; leaving it unchanged"
+	return 1
+}
+
+replace_managed_symlink () {
+	local target=$1
+	local link_path=$2
+	local temporary_link="${link_path}.tmp.$$"
+	shift 2
+
+	managed_symlink_is_replaceable "$target" "$link_path" "$@" || return 1
+	if [[ -L "$link_path" && "$(readlink -- "$link_path")" == "$target" ]]
+	then
+		return 0
+	fi
+
+	ln -sT -- "$target" "$temporary_link" || return 1
+	if ! mv -Tf -- "$temporary_link" "$link_path"
+	then
+		rm -f -- "$temporary_link"
+		return 1
+	fi
 }
 
 neovim_checksum () {
@@ -53,6 +97,7 @@ neovim_checksum () {
 
 install_neovim () {
 	local os arch asset version version_name install_root install_dir current_link tmp_dir url archive extracted_dir
+	local managed_current_pattern managed_binary_pattern
 	local expected_checksum actual_checksum
 
 	os="$(uname -s)"
@@ -82,13 +127,23 @@ install_neovim () {
 	install_root="$HOME/.local/opt"
 	install_dir="$install_root/neovim-$version_name"
 	current_link="$install_root/neovim-current"
+	managed_current_pattern="$install_root/neovim-[0-9]*"
+	managed_binary_pattern="$install_root/neovim-[0-9]*/bin/nvim"
 
 	mkdir -p "$HOME/.local/bin" "$install_root" || return 1
+	managed_symlink_is_replaceable "$install_dir" "$current_link" \
+		"$managed_current_pattern" || return 1
+	managed_symlink_is_replaceable "$current_link/bin/nvim" \
+		"$HOME/.local/bin/nvim" "$current_link/bin/nvim" \
+		"$managed_binary_pattern" || return 1
 
 	if [[ -x "$install_dir/bin/nvim" ]]
 	then
-		replace_managed_symlink "$install_dir" "$current_link" || return 1
-		replace_managed_symlink "$current_link/bin/nvim" "$HOME/.local/bin/nvim" || return 1
+		replace_managed_symlink "$install_dir" "$current_link" \
+			"$managed_current_pattern" || return 1
+		replace_managed_symlink "$current_link/bin/nvim" \
+			"$HOME/.local/bin/nvim" "$current_link/bin/nvim" \
+			"$managed_binary_pattern" || return 1
 		success "selected Neovim $version_name"
 		return 0
 	fi
@@ -136,8 +191,11 @@ install_neovim () {
 	fi
 
 	mv "$extracted_dir" "$install_dir" || return 1
-	replace_managed_symlink "$install_dir" "$current_link" || return 1
-	replace_managed_symlink "$current_link/bin/nvim" "$HOME/.local/bin/nvim" || return 1
+	replace_managed_symlink "$install_dir" "$current_link" \
+		"$managed_current_pattern" || return 1
+	replace_managed_symlink "$current_link/bin/nvim" \
+		"$HOME/.local/bin/nvim" "$current_link/bin/nvim" \
+		"$managed_binary_pattern" || return 1
 	hash -r 2>/dev/null || true
 
 	success "installed Neovim $version_name"

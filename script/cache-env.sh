@@ -95,6 +95,8 @@ lock_fd=''
 version_file=''
 compatibility_action='none'
 managed_versions_present=false
+latest_version_file=''
+latest_version_name=''
 replacement_dir=''
 replacement_path=''
 replacement_is_expected=false
@@ -288,7 +290,7 @@ managed_version_file_is_complete () {
 		"$end_marker" == "$managed_end_marker" ]]
 }
 
-managed_version_exists () {
+find_latest_managed_version () {
 	local candidate candidate_name version_digits
 
 	for candidate in "$version_dir"/v*.sh
@@ -298,13 +300,19 @@ managed_version_exists () {
 		version_digits=${version_digits%.sh}
 		[[ ${#version_digits} -eq 18 &&
 			"$version_digits" != *[!0-9]* ]] || continue
-		managed_version_file_is_complete "$candidate" && return 0
+		managed_version_file_is_complete "$candidate" || continue
+		if [[ -z "$latest_version_name" ||
+			"$candidate_name" > "$latest_version_name" ]]
+		then
+			latest_version_name=$candidate_name
+			latest_version_file=$candidate
+		fi
 	done
 
-	return 1
+	[[ -n "$latest_version_file" ]]
 }
 
-if managed_version_exists
+if find_latest_managed_version
 then
 	managed_versions_present=true
 fi
@@ -503,43 +511,56 @@ then
 	fi
 fi
 
-for candidate in "$version_dir"/v*.sh
-do
-	[[ -e "$candidate" || -L "$candidate" ]] || continue
-	candidate_name=${candidate##*/}
-	if [[ "$candidate_name" =~ ^v([0-9]{18})\.sh$ ]] &&
-		managed_version_file_is_complete "$candidate"
-	then
-		version_number=$((10#${BASH_REMATCH[1]}))
-		[[ "$version_number" -gt "$max_version" ]] &&
-			max_version=$version_number
-	fi
-done
-
-for attempt in {1..10}
-do
-	if [[ "$max_version" -ge 999999999999999999 ]]
-	then
-		version_file=''
-		break
-	fi
-	max_version=$((max_version + 1))
-	printf -v candidate_name 'v%018d.sh' "$max_version"
-	version_file="$version_dir/$candidate_name"
-	if ln -T -- "$temporary_file" "$version_file" 2>/dev/null
-	then
-		break
-	fi
-	version_file=''
-done
-if [[ -z "$version_file" ]]
+version_published=true
+if [[ -n "$latest_version_file" ]] &&
+	cmp -s -- "$temporary_file" "$latest_version_file"
 then
-	fail 'could not commit a unique cache environment version'
+	version_file=$latest_version_file
+	version_published=false
+else
+	for candidate in "$version_dir"/v*.sh
+	do
+		[[ -e "$candidate" || -L "$candidate" ]] || continue
+		candidate_name=${candidate##*/}
+		if [[ "$candidate_name" =~ ^v([0-9]{18})\.sh$ ]] &&
+			managed_version_file_is_complete "$candidate"
+		then
+			version_number=$((10#${BASH_REMATCH[1]}))
+			[[ "$version_number" -gt "$max_version" ]] &&
+				max_version=$version_number
+		fi
+	done
+
+	for attempt in {1..10}
+	do
+		if [[ "$max_version" -ge 999999999999999999 ]]
+		then
+			version_file=''
+			break
+		fi
+		max_version=$((max_version + 1))
+		printf -v candidate_name 'v%018d.sh' "$max_version"
+		version_file="$version_dir/$candidate_name"
+		if ln -T -- "$temporary_file" "$version_file" 2>/dev/null
+		then
+			break
+		fi
+		version_file=''
+	done
+	if [[ -z "$version_file" ]]
+	then
+		fail 'could not commit a unique cache environment version'
+	fi
 fi
 
 if [[ "$compatibility_action" == "replace" ]]
 then
-	replace_compatibility_if_unchanged || true
+	if cmp -s -- "$compatibility_temp" "$existing_fd_path"
+	then
+		compatibility_action='none'
+	else
+		replace_compatibility_if_unchanged || true
+	fi
 elif [[ "$compatibility_action" == "create" ]]
 then
 	if ln -T -- "$compatibility_temp" "$config_file" 2>/dev/null
@@ -571,5 +592,10 @@ exec {lock_fd}<&-
 lock_fd=''
 trap - EXIT HUP INT TERM
 
-printf 'cache env: wrote %s\n' "$version_file"
+if [[ "$version_published" == "true" ]]
+then
+	printf 'cache env: wrote %s\n' "$version_file"
+else
+	printf 'cache env: unchanged %s\n' "$version_file"
+fi
 printf 'cache env: workspace %s\n' "$workspace"

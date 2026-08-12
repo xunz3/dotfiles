@@ -10,6 +10,7 @@ DOTFILES_ROOT=$(pwd -P)
 dry_run=false
 event_file=''
 plain=false
+preset_user=false
 
 usage () {
 	cat <<'EOF'
@@ -17,6 +18,7 @@ Usage: script/setup-tui.sh [options]
 
 Options:
   --dry-run     collect choices and print the equivalent setup command
+  --user        start with user-only installation selected
   -h, --help    show this help text
 EOF
 }
@@ -26,6 +28,9 @@ do
 	case "$1" in
 		--dry-run)
 			dry_run=true
+			;;
+		--user)
+			preset_user=true
 			;;
 		--events)
 			if [[ $# -lt 2 || ! -r "${2:-}" ]]
@@ -1041,7 +1046,10 @@ collect_conflicts
 detect_cache_workspace
 
 PACKAGE_INDEX=0
-[[ "$CAN_INSTALL_PACKAGES" != "true" ]] && PACKAGE_INDEX=1
+if [[ "$preset_user" == "true" || "$CAN_INSTALL_PACKAGES" != "true" ]]
+then
+	PACKAGE_INDEX=1
+fi
 CONFLICT_INDEX=0
 CONFIRMED_CONFLICT_PATHS=()
 FORCE_PATHS_CONFIRMED=false

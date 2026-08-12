@@ -32,7 +32,7 @@ Commands:
 
 Common options:
 	init --dry-run        Review choices without running setup
-	setup --tui           Alias for the interactive guided setup
+	setup --tui [--user]  Open the guided setup, optionally preselect user-only
 	setup --backup       Back up conflicting dotfiles during bootstrap
 	setup --user         Skip system package installation
 	setup --cache-workspace DIR
@@ -81,13 +81,22 @@ run_setup() {
 	local bootstrap_args=()
 	local install_args=()
 	local passthrough_toolchain_profiles=false
-	local cache_workspace=''
+	local use_tui=false
+	local argument
+	local tui_args=()
 
-	if [[ "${1:-}" == "--tui" || "${1:-}" == "--interactive" ]]
-	then
-		shift
-		run_init "$@"
-	fi
+	for argument in "$@"
+	do
+		case "$argument" in
+			--tui|--interactive)
+				use_tui=true
+				;;
+			*)
+				tui_args+=("$argument")
+				;;
+		esac
+	done
+	[[ "$use_tui" == "true" ]] && run_init "${tui_args[@]}"
 
 	while [[ $# -gt 0 ]]
 	do
@@ -110,7 +119,6 @@ run_setup() {
 					echo "--cache-workspace requires an absolute WORKSPACE path" >&2
 					exit 1
 				fi
-				cache_workspace=$2
 				bootstrap_args+=("$1" "$2")
 				shift
 				;;
@@ -122,7 +130,7 @@ run_setup() {
 				display_usage_and_exit
 				;;
 			*)
-				if [[ "$passthrough_toolchain_profiles" == "true" ]]
+				if [[ "$passthrough_toolchain_profiles" == "true" && "$1" != -* ]]
 				then
 					install_args+=("$1")
 				else
@@ -134,10 +142,6 @@ run_setup() {
 		shift
 	done
 
-	if [[ -n "$cache_workspace" ]]
-	then
-		"$dotfiles_directory/script/cache-env.sh" --validate "$cache_workspace"
-	fi
 	run_bootstrap "${bootstrap_args[@]}"
 	run_install "${install_args[@]}"
 }
