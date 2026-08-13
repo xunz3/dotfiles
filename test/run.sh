@@ -1151,7 +1151,7 @@ test_tui_event_flow_executes_exact_setup_arguments () {
 		printf '%s\n' enter
 	} > "$events"
 
-	output="$(HOME="$test_home" PATH="$fake_bin:$PATH" DOTFILES_TOOLCHAINS=nvim \
+	output="$(HOME="$test_home" PATH="$fake_bin:$PATH" \
 		"$fixture/script/setup-tui.sh" --events "$events" --plain 2>&1)" || {
 		printf '%s\n' "$output" >&2
 		return 1
@@ -1178,7 +1178,7 @@ test_tui_does_not_source_local_configuration () {
 		'touch "$HOME/cache-env-executed"' > "$config_home/dotfiles/cache-env.sh"
 	printf '%s\n' \
 		'touch "$HOME/toolchainsrc-executed"' \
-		'export DOTFILES_TOOLCHAINS="nvim"' > "$test_home/.toolchainsrc"
+		'export DOTFILES_TOOLCHAINS="node"' > "$test_home/.toolchainsrc"
 	printf 'existing git config\n' > "$test_home/.gitconfig.local"
 	printf '%s\n' '#!/usr/bin/env bash' 'exit 0' > "$fake_bin/apt-get"
 	printf '%s\n' '#!/usr/bin/env bash' 'exit 0' > "$fake_bin/sudo"
@@ -1228,7 +1228,7 @@ test_tui_toolchain_defaults_use_last_safe_assignment () {
 	printf '%s\n' enter enter enter quit > "$events"
 
 	printf '%s\n' \
-		"DOTFILES_TOOLCHAINS='nvim' # earlier value" \
+		"DOTFILES_TOOLCHAINS='go' # earlier value" \
 		'export DOTFILES_TOOLCHAINS="node python" # final profiles' > "$test_home/.toolchainsrc"
 	output="$(
 		unset DOTFILES_TOOLCHAINS
@@ -1241,7 +1241,16 @@ test_tui_toolchain_defaults_use_last_safe_assignment () {
 
 	assert_contains "$output" '[✓] node'
 	assert_contains "$output" '[✓] python'
-	[[ "$output" != *'[✓] nvim'* ]] || fail_test 'TUI used an earlier DOTFILES_TOOLCHAINS assignment'
+	[[ "$output" != *'[✓] go'* ]] || fail_test 'TUI used an earlier DOTFILES_TOOLCHAINS assignment'
+
+	output="$(HOME="$test_home" XDG_CONFIG_HOME="$config_home" PATH="$fake_bin:$PATH" \
+		DOTFILES_TOOLCHAINS='' \
+		"$ROOT/script/setup-tui.sh" --events "$events" --plain 2>&1)" || {
+		printf '%s\n' "$output" >&2
+		return 1
+	}
+	[[ "$output" != *'[✓]'* ]] || \
+		fail_test 'TUI let ~/.toolchainsrc override an explicitly empty environment selection'
 
 	printf '%s\n' \
 		'DOTFILES_TOOLCHAINS="node python" # earlier safe value' \
@@ -1340,7 +1349,7 @@ test_tui_overwrite_uses_confirmed_force_paths () {
 		printf '%s\n' 'text:OVERWRITE'
 	} > "$events"
 
-	output="$(HOME="$test_home" PATH="$fake_bin:$PATH" DOTFILES_TOOLCHAINS=nvim \
+	output="$(HOME="$test_home" PATH="$fake_bin:$PATH" \
 		"$fixture/script/setup-tui.sh" --events "$events" --plain 2>&1)" || {
 		printf '%s\n' "$output" >&2
 		return 1
@@ -1399,7 +1408,7 @@ test_tui_sudo_failure_returns_to_user_only_scope () {
 		printf '%s\n' enter
 	} > "$events"
 
-	output="$(HOME="$test_home" PATH="$fake_bin:$PATH" DOTFILES_TOOLCHAINS=nvim \
+	output="$(HOME="$test_home" PATH="$fake_bin:$PATH" \
 		"$fixture/script/setup-tui.sh" --events "$events" --plain 2>&1)" || {
 		printf '%s\n' "$output" >&2
 		return 1
@@ -1789,7 +1798,7 @@ test_base_packages_include_interactive_tools () {
 		return 1
 	}
 
-	for package in btop direnv eza git-delta hyperfine
+	for package in btop direnv eza git-delta hyperfine vim
 	do
 		grep -Fxq "$package" <<< "$output" || \
 			fail_test "base package profile is missing $package"
@@ -1798,6 +1807,130 @@ test_base_packages_include_interactive_tools () {
 	then
 		fail_test 'ambiguous distro yq package remains in the system package profile'
 	fi
+}
+
+test_vim_config_loads_standalone () {
+	local test_home="$TEST_TMP_ROOT/vim-home"
+	local output status
+
+	command -v vim >/dev/null 2>&1 || return 0
+
+	mkdir -p "$test_home"
+	output="$(HOME="$test_home" vim -Nu "$ROOT/vim/vimrc.symlink" -i NONE -n -es \
+		+'if !&number || &relativenumber || &tabstop != 4 || !&expandtab | cquit 20 | endif' \
+		+qall 2>&1)"
+	status=$?
+
+	[[ $status -eq 0 ]] || {
+		printf '%s\n' "$output" >&2
+		fail_test "Vim config failed to load with status $status"
+	}
+	[[ ! -e "$test_home/.vim" ]] || \
+		fail_test 'Vim config created a plugin or runtime directory in a clean home'
+}
+
+test_terminal_editor_defaults_to_vim () {
+	local fake_bin="$TEST_TMP_ROOT/editor-bin"
+	local fallback_bin="$TEST_TMP_ROOT/vi-fallback-bin"
+	local output git_editor
+	local zsh_bin
+
+	mkdir -p "$fake_bin" "$fallback_bin"
+	zsh_bin="$(command -v zsh)" || fail_test 'zsh is required for editor default tests'
+	printf '%s\n' '#!/bin/sh' 'exit 0' > "$fake_bin/vim"
+	printf '%s\n' '#!/bin/sh' 'exit 0' > "$fake_bin/code"
+	chmod +x "$fake_bin/vim" "$fake_bin/code"
+
+	output="$(PATH="$fake_bin:/usr/bin:/bin" "$zsh_bin" -f -c \
+		'source "$1"; print -r -- "$EDITOR:$VISUAL:$GIT_EDITOR"' \
+		_ "$ROOT/shell/core/env.zsh")" || {
+		printf '%s\n' "$output" >&2
+		return 1
+	}
+	[[ "$output" == 'vim:vim:vim' ]] || \
+		fail_test "terminal editor defaults were not Vim: $output"
+
+	git_editor="$(git config --file "$ROOT/git/gitconfig.symlink" --get core.editor)" || \
+		fail_test 'tracked Git config has no core.editor'
+	[[ "$git_editor" == 'vim' ]] || fail_test "Git editor is not Vim: $git_editor"
+
+	printf '%s\n' '#!/bin/sh' 'exit 0' > "$fallback_bin/vi"
+	chmod +x "$fallback_bin/vi"
+	output="$(PATH="$fallback_bin" "$zsh_bin" -f -c \
+		'source "$1"; print -r -- "$EDITOR:$VISUAL:$GIT_EDITOR"' \
+		_ "$ROOT/shell/core/env.zsh")" || {
+		printf '%s\n' "$output" >&2
+		return 1
+	}
+	[[ "$output" == 'vi:vi:vi' ]] || \
+		fail_test "system vi fallback was not selected: $output"
+}
+
+test_toolchains_have_no_implicit_default () {
+	local defaults profiles
+
+	defaults="$(
+		unset DOTFILES_TOOLCHAINS
+		source "$ROOT/toolchains/lib/profiles.sh"
+		dotfiles_toolchain_resolve_profiles
+	)" || {
+		printf '%s\n' "$defaults" >&2
+		return 1
+	}
+	[[ -z "$defaults" ]] || fail_test "unexpected default toolchain profiles: $defaults"
+
+	profiles="$(source "$ROOT/toolchains/lib/profiles.sh"; dotfiles_toolchain_all_profiles)"
+	[[ "$profiles" == $'node\njava\nrust\ngo\npython\nbun' ]] || \
+		fail_test "unexpected toolchain profile list: $profiles"
+}
+
+test_legacy_toolchain_selection_is_upgrade_safe () {
+	local test_home="$TEST_TMP_ROOT/legacy-toolchains-home"
+	local output status
+
+	mkdir -p "$test_home"
+	printf '%s\n' 'export DOTFILES_TOOLCHAINS="nvim"' > "$test_home/.toolchainsrc"
+
+	output="$(env -u DOTFILES_TOOLCHAINS HOME="$test_home" \
+		"$ROOT/script/install" --print --toolchains 2>&1)" || {
+		printf '%s\n' "$output" >&2
+		return 1
+	}
+	assert_contains "$output" 'profile: toolchains:none'
+
+	output="$(env -u DOTFILES_TOOLCHAINS HOME="$test_home" \
+		"$ROOT/toolchains/install.sh" 2>&1)" || {
+		printf '%s\n' "$output" >&2
+		return 1
+	}
+	assert_contains "$output" 'no toolchain profiles selected; skipping'
+
+	output="$(HOME="$test_home" "$ROOT/toolchains/install.sh" nvim 2>&1)"
+	status=$?
+	[[ $status -eq 1 ]] || fail_test "explicit retired profile returned status $status"
+	assert_contains "$output" 'unknown toolchain profile: nvim'
+}
+
+test_empty_toolchain_environment_overrides_file () {
+	local test_home="$TEST_TMP_ROOT/empty-toolchains-home"
+	local output
+
+	mkdir -p "$test_home"
+	printf '%s\n' 'export DOTFILES_TOOLCHAINS="node"' > "$test_home/.toolchainsrc"
+
+	output="$(HOME="$test_home" DOTFILES_TOOLCHAINS='' \
+		"$ROOT/script/install" --print --toolchains 2>&1)" || {
+		printf '%s\n' "$output" >&2
+		return 1
+	}
+	assert_contains "$output" 'profile: toolchains:none'
+
+	output="$(HOME="$test_home" DOTFILES_TOOLCHAINS='' \
+		"$ROOT/toolchains/install.sh" 2>&1)" || {
+		printf '%s\n' "$output" >&2
+		return 1
+	}
+	assert_contains "$output" 'no toolchain profiles selected; skipping'
 }
 
 test_eza_aliases_preserve_platform_ls () {
@@ -1910,80 +2043,6 @@ test_remote_script_runner_propagates_status () {
 	status=$?
 
 	[[ $status -eq 23 ]] || fail_test "expected status 23, got $status"
-}
-
-test_neovim_reconciles_existing_target_version () {
-	local test_home="$TEST_TMP_ROOT/nvim-home"
-	local install_root="$test_home/.local/opt"
-	local output
-
-	mkdir -p "$install_root/neovim-0.11.4/bin" "$install_root/neovim-0.11.5/bin" "$test_home/.local/bin"
-	printf '%s\n' '#!/usr/bin/env bash' 'exit 0' > "$install_root/neovim-0.11.5/bin/nvim"
-	chmod +x "$install_root/neovim-0.11.5/bin/nvim"
-	ln -s "$install_root/neovim-0.11.4" "$install_root/neovim-current"
-	ln -s "$install_root/neovim-0.11.4/bin/nvim" "$test_home/.local/bin/nvim"
-
-	output="$(HOME="$test_home" "$ROOT/nvim/install.sh" 2>&1)" || {
-		printf '%s\n' "$output" >&2
-		return 1
-	}
-
-	[[ "$(readlink "$install_root/neovim-current")" == "$install_root/neovim-0.11.5" ]] || \
-		fail_test 'neovim-current did not switch to the requested version'
-	[[ "$(readlink "$test_home/.local/bin/nvim")" == "$install_root/neovim-current/bin/nvim" ]] || \
-		fail_test '~/.local/bin/nvim was not reconciled'
-	assert_contains "$output" 'selected Neovim 0.11.5'
-}
-
-test_neovim_preserves_unmanaged_binary_symlink () {
-	local test_home="$TEST_TMP_ROOT/nvim-unmanaged-home"
-	local install_root="$test_home/.local/opt"
-	local custom_bin="$test_home/custom/nvim"
-	local output status
-
-	mkdir -p "$install_root/neovim-0.11.4/bin" \
-		"$install_root/neovim-0.11.5/bin" "$test_home/.local/bin" \
-		"$(dirname "$custom_bin")"
-	printf '%s\n' '#!/usr/bin/env bash' 'exit 0' > "$install_root/neovim-0.11.5/bin/nvim"
-	printf '%s\n' '#!/usr/bin/env bash' 'exit 0' > "$custom_bin"
-	chmod +x "$install_root/neovim-0.11.5/bin/nvim" "$custom_bin"
-	ln -s "$install_root/neovim-0.11.4" "$install_root/neovim-current"
-	ln -s "$custom_bin" "$test_home/.local/bin/nvim"
-
-	output="$(HOME="$test_home" "$ROOT/nvim/install.sh" 2>&1)"
-	status=$?
-	[[ $status -ne 0 ]] || fail_test 'Neovim install silently accepted an unmanaged binary link'
-	[[ "$(readlink "$test_home/.local/bin/nvim")" == "$custom_bin" ]] || \
-		fail_test 'Neovim install replaced the unmanaged binary link'
-	[[ "$(readlink "$install_root/neovim-current")" == \
-		"$install_root/neovim-0.11.4" ]] || \
-		fail_test 'Neovim install partially changed managed links before refusing the custom binary'
-	assert_contains "$output" 'points to an unmanaged target; leaving it unchanged'
-}
-
-test_neovim_rejects_checksum_mismatch () {
-	local test_home="$TEST_TMP_ROOT/nvim-checksum-home"
-	local fake_bin="$TEST_TMP_ROOT/nvim-checksum-bin"
-	local output status
-
-	mkdir -p "$test_home" "$fake_bin"
-	printf '%s\n' \
-		'#!/usr/bin/env bash' \
-		'output=' \
-		'while [[ $# -gt 0 ]]; do' \
-		'  if [[ "$1" == -o ]]; then output=$2; shift 2; else shift; fi' \
-		'done' \
-		'printf "not an archive\\n" > "$output"' > "$fake_bin/curl"
-	chmod +x "$fake_bin/curl"
-
-	output="$(HOME="$test_home" PATH="$fake_bin:$PATH" DOTFILES_NEOVIM_VERSION=v9.9.9 \
-		DOTFILES_NEOVIM_SHA256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
-		"$ROOT/nvim/install.sh" 2>&1)"
-	status=$?
-
-	[[ $status -eq 1 ]] || fail_test "expected status 1, got $status"
-	assert_contains "$output" 'archive checksum mismatch'
-	[[ ! -e "$test_home/.local/opt/neovim-9.9.9" ]] || fail_test 'invalid archive was installed'
 }
 
 test_yq_reconciles_existing_target_version () {
@@ -2108,14 +2167,16 @@ run_test 'setup routes flags after toolchain profiles' test_setup_routes_flags_a
 run_test 'user mode skips manager and aggregates topics' test_user_mode_skips_manager_and_reports_topics
 run_test 'package failures reach the top-level status' test_package_failure_reaches_exit_status
 run_test 'base package profile includes interactive tools' test_base_packages_include_interactive_tools
+run_test 'Vim config loads standalone' test_vim_config_loads_standalone
+run_test 'terminal editor defaults use Vim' test_terminal_editor_defaults_to_vim
+run_test 'toolchains have no implicit default' test_toolchains_have_no_implicit_default
+run_test 'legacy toolchain selection remains upgrade-safe' test_legacy_toolchain_selection_is_upgrade_safe
+run_test 'empty toolchain environment overrides local config' test_empty_toolchain_environment_overrides_file
 run_test 'eza aliases preserve the platform ls command' test_eza_aliases_preserve_platform_ls
 run_test 'direnv hook loads in fallback Zsh' test_direnv_hook_loads_in_fallback_zsh
 run_test 'Git pager prefers Delta and falls back for filters' test_git_pager_prefers_delta_and_has_filter_fallback
 run_test 'toolchain profile failures reach the top-level status' test_toolchain_profile_failure_reaches_exit_status
 run_test 'downloaded script failures reach the profile' test_remote_script_runner_propagates_status
-run_test 'Neovim reconciles an existing target version' test_neovim_reconciles_existing_target_version
-run_test 'Neovim preserves an unmanaged binary symlink' test_neovim_preserves_unmanaged_binary_symlink
-run_test 'Neovim rejects checksum mismatches' test_neovim_rejects_checksum_mismatch
 run_test 'yq reconciles an existing target version' test_yq_reconciles_existing_target_version
 run_test 'yq preserves an unmanaged binary symlink' test_yq_preserves_unmanaged_binary_symlink
 run_test 'yq rejects checksum mismatches' test_yq_rejects_checksum_mismatch

@@ -4,7 +4,7 @@ Reviewed on 2026-08-13 against the checked-out configuration and the current Ubu
 
 ## Baseline
 
-The host had Zsh 5.9, tmux 3.4, Git 2.43.0, Neovim 0.11.5, fzf 0.44.1, ripgrep 15.2.0, Vim 9.1, and htop 3.3.0. Oh My Zsh, zsh-autosuggestions, and zsh-syntax-highlighting were installed. `zoxide`, `fzf-tab`, Starship, and TPM were not installed.
+The host had Zsh 5.9, tmux 3.4, Git 2.43.0, fzf 0.44.1, ripgrep 15.2.0, Vim 9.1, and htop 3.3.0. Oh My Zsh, zsh-autosuggestions, and zsh-syntax-highlighting were installed. `zoxide`, `fzf-tab`, Starship, and TPM were not installed.
 
 At the start of the review there was minor host/profile drift: `packages/common.txt` declared `btop` and a package named `yq`, but neither command was present on this host. Further inspection found that Ubuntu 24.04 resolves that `yq` name to the Python/jq-wrapper implementation rather than the commonly expected Mike Farah v4 CLI. Debian's `fdfind` and `batcat` names were present and were already normalized by shell aliases.
 
@@ -12,7 +12,7 @@ With an already-generated completion dump, representative warm interactive Zsh s
 
 The tmux config parsed against tmux 3.4 but advertised `screen-256color` even though the richer `tmux-256color` terminfo entry is installed. Copy-mode bound the same `y` key up to three times; when both Wayland and X11 helpers existed, the last matching binding won rather than the intended provider. Pane deletion also bypassed tmux's normal confirmation prompt.
 
-The Neovim configuration is already modular, pins Neovim, locks plugins, lazy-loads most interactive features, and uses the Neovim 0.11 LSP API. htop is also a straightforward generated configuration. Neither showed a high-value change that justified changing established editor or monitoring behavior in this pass.
+The editor configuration was later narrowed to a plugin-free Vim setup for terminal work, leaving IDE features to VS Code. htop remains a straightforward generated configuration.
 
 ## Decisions
 

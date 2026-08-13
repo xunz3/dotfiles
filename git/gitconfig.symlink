@@ -19,7 +19,7 @@
         ui = true
 [core]
         excludesfile = ~/.gitignore
-        editor = nvim
+        editor = vim
         pager = $HOME/.dotfiles/bin/git-pager
 [interactive]
         diffFilter = $HOME/.dotfiles/bin/git-pager --color-only

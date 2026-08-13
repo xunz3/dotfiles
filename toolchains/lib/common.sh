@@ -63,11 +63,3 @@ run_remote_script () {
 	rm -f -- "$temporary_script"
 	return "$status"
 }
-
-load_toolchain_config () {
-	if [[ -f "$HOME/.toolchainsrc" ]]
-	then
-		# shellcheck source=/dev/null
-		source "$HOME/.toolchainsrc"
-	fi
-}

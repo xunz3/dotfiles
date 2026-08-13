@@ -20,7 +20,6 @@ usage () {
 Usage: toolchains/install.sh [profiles]
 
 Profiles:
-  nvim   Install Neovim Mason language tools
   node   Install nvm, Node.js LTS, pnpm, yarn, and npm globals
   java   Install sdkman, JDK, Maven, Gradle, and Kotlin
   rust   Install rustup, Rust stable, rustfmt, and clippy
@@ -32,8 +31,9 @@ Profiles:
 Commands:
   list      Print available profiles
 
-When no profile is passed, DOTFILES_TOOLCHAINS from ~/.toolchainsrc is used.
-If DOTFILES_TOOLCHAINS is unset, the default is nvim.
+When no profile is passed, an explicitly set DOTFILES_TOOLCHAINS takes priority,
+including an empty value. Otherwise ~/.toolchainsrc is used. An unset or empty
+selection installs no profile. A legacy nvim entry in that file is ignored.
 EOF
 }
 
@@ -82,7 +82,7 @@ run_profiles () {
 	local succeeded=()
 	local failed=()
 
-	load_toolchain_config
+	dotfiles_load_toolchain_config
 	mapfile -t profiles < <(dotfiles_toolchain_resolve_profiles "${requested[@]}")
 
 	if [[ ${#profiles[@]} -eq 0 ]]

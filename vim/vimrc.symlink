@@ -1,70 +1,57 @@
-" ========== 基础设置 ==========
+" Lightweight terminal Vim configuration. Keep IDE features in VS Code.
 set nocompatible
-set number
-set relativenumber
-set cursorline
-set showcmd
-set wildmenu
-set hlsearch
-set incsearch
-set ignorecase
-set smartcase
-set wrap
-set scrolloff=5
-set clipboard=unnamedplus
+scriptencoding utf-8
+
+filetype plugin indent on
+syntax enable
+
+" Editing defaults
+set encoding=utf-8
+set backspace=indent,eol,start
+set hidden
+set confirm
+set autoread
 set mouse=a
 
-" 缩进
 set tabstop=4
 set shiftwidth=4
+set softtabstop=4
 set expandtab
 set autoindent
 set smartindent
 
-" 编码
-set encoding=utf-8
-set fileencoding=utf-8
+" Search and navigation
+set number
+set ruler
+set showcmd
+set showmatch
+set scrolloff=3
+set sidescrolloff=5
+set nowrap
+set incsearch
+set hlsearch
+set ignorecase
+set smartcase
 
-" 主题
-syntax on
+" Completion and display
+set wildmenu
+set wildmode=longest:full,full
+set laststatus=2
 set background=dark
 colorscheme desert
 
-" ========== 插件管理（vim-plug） ==========
-call plug#begin('~/.vim/plugged')
+if has('clipboard')
+  set clipboard^=unnamedplus
+endif
 
-" 文件树
-Plug 'preservim/nerdtree'
+let mapleader = ' '
+nnoremap <silent> <leader>w :write<CR>
+nnoremap <silent> <leader>q :quit<CR>
+nnoremap <silent> <Esc><Esc> :nohlsearch<CR>
 
-" 状态栏
-Plug 'vim-airline/vim-airline'
-Plug 'vim-airline/vim-airline-themes'
-
-" 语法高亮增强
-Plug 'sheerun/vim-polyglot'
-
-" 自动补全（轻量）
-Plug 'neoclide/coc.nvim', {'branch': 'release'}
-
-" Git 集成
-Plug 'tpope/vim-fugitive'
-
-call plug#end()
-
-" ========== 插件配置 ==========
-
-" NERDTree 快捷键
-nnoremap <C-n> :NERDTreeToggle<CR>
-
-" airline 主题
-let g:airline_theme='dark'
-let g:airline_powerline_fonts = 1
-
-" coc.nvim 基础配置
-inoremap <silent><expr> <TAB> pumvisible() ? "\<C-n>" : "\<TAB>"
-inoremap <silent><expr> <S-TAB> pumvisible() ? "\<C-p>" : "\<S-TAB>"
-nmap <leader>rn <Plug>(coc-rename)
-nmap <leader>f <Plug>(coc-format)
-
-" 保存时自动格式化（可选）
-autocmd BufWritePre * silent! :CocCommand editor.action.formatDocument
+augroup dotfiles_vim
+  autocmd!
+  autocmd BufReadPost * if line("'\"") > 1 && line("'\"") <= line('$') | execute "normal! g`\"" | endif
+  autocmd FileType gitcommit,markdown,text setlocal wrap linebreak
+  autocmd FileType make setlocal noexpandtab
+augroup END

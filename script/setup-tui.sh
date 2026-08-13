@@ -632,7 +632,6 @@ read_toolchain_defaults () {
 
 profile_description () {
 	case "$1" in
-		nvim) printf 'Neovim Mason language servers and formatters' ;;
 		node) printf 'Node.js LTS, pnpm, yarn, and global tools' ;;
 		java) printf 'JDK, Maven, Gradle, and Kotlin' ;;
 		rust) printf 'Rust stable, rustfmt, and clippy' ;;
@@ -644,11 +643,13 @@ profile_description () {
 }
 
 load_profile_defaults () {
-	local defaults="${DOTFILES_TOOLCHAINS:-}"
+	local defaults="${DOTFILES_TOOLCHAINS-}"
+	local environment_selection_set=false
 	local profile index
 
 	PROFILE_DEFAULTS_WARNING=''
-	if [[ -z "$defaults" &&
+	[[ "${DOTFILES_TOOLCHAINS+x}" == "x" ]] && environment_selection_set=true
+	if [[ "$environment_selection_set" != "true" &&
 		( -e "$HOME/.toolchainsrc" || -L "$HOME/.toolchainsrc" ) ]]
 	then
 		if ! defaults="$(read_toolchain_defaults "$HOME/.toolchainsrc")"
@@ -657,11 +658,6 @@ load_profile_defaults () {
 			PROFILE_DEFAULTS_WARNING='Could not safely read DOTFILES_TOOLCHAINS; no profiles were preselected.'
 		fi
 	fi
-	if [[ -z "$defaults" && -z "$PROFILE_DEFAULTS_WARNING" ]]
-	then
-		defaults='nvim'
-	fi
-
 	PROFILE_SELECTED=()
 	for _ in "${PROFILE_NAMES[@]}"
 	do
@@ -679,7 +675,7 @@ load_profile_defaults () {
 		fi
 		if [[ "$profile" == "default" ]]
 		then
-			profile='nvim'
+			continue
 		fi
 		for index in "${!PROFILE_NAMES[@]}"
 		do

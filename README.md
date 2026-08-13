@@ -6,9 +6,9 @@ This repo manages:
 
 - shell: `zsh`, `oh-my-zsh`, aliases, completions, paths
 - terminal: `tmux`
-- editors: `vim`, `neovim`
+- terminal editor: `vim`
 - CLI config: `git`, `htop`, `neofetch`
-- optional toolchain profiles: `nvim`, `node`, `java`, `rust`, `go`, `python`, `bun`
+- optional toolchain profiles: `node`, `java`, `rust`, `go`, `python`, `bun`
 
 ## Fresh Machine Setup
 
@@ -120,6 +120,8 @@ Clipboard copy is shared by tmux and `pubkey`, with Wayland, X11, macOS, and WSL
 
 Git uses Delta for human-facing diffs and interactive staging when it is installed. Within a long diff, `n` and `N` move between files and commits. A repository-owned pager wrapper falls back to `less` or plain output if the package is unavailable, so user-only and partially completed installs still have working Git output.
 
+Vim is intentionally a small, plugin-free terminal editor. The tracked config provides dependable navigation, search, indentation, clipboard integration when supported, a few save/quit mappings, and sensible file-type defaults. IDE features such as language servers, completion, file explorers, and formatting stay in VS Code, so installing these dotfiles does not bootstrap a second editor ecosystem.
+
 ## Optional Cache Workspace
 
 `--cache-workspace DIR` is an explicit machine-local profile. It creates the cache tree under `DIR/cache` and writes a mode-`0600` immutable profile under `${XDG_CONFIG_HOME:-~/.config}/dotfiles/cache-env.d/`. It also maintains an independent `cache-env.sh` compatibility copy while that path remains managed, without overwriting a concurrently replaced path. `~/.zshenv` and `script/install` select the newest complete immutable profile, so activation is atomic and the first setup run already uses the selected locations.
@@ -150,18 +152,16 @@ By default, package installation uses the system package manager through `sudo` 
 
 Package and topic failures are accumulated so the remaining independent installers can run. The final summary lists failures, and `dot install` / `dot setup` returns a non-zero status if any required package, topic, or selected toolchain profile failed.
 
-The base profile includes a practical server/workstation baseline: Git with Delta, zsh, Vim, tmux, htop/btop, Neovim support tools, GitHub CLI, ripgrep/fzf, direnv, eza, hyperfine, JSON/YAML tools, archive tools, rsync, tree, file, lsof, ncdu, OpenSSH client, DNS/IP/ping/netcat utilities, Python 3, and build essentials for the current distro.
+The base profile includes a practical server/workstation baseline: Git with Delta, zsh, Vim, tmux, htop/btop, GitHub CLI, ripgrep/fzf, direnv, eza, hyperfine, JSON/YAML tools, archive tools, rsync, tree, file, lsof, ncdu, OpenSSH client, DNS/IP/ping/netcat utilities, Python 3, and build essentials for the current distro.
 
 Base install hooks:
 
 - `zsh/install.sh`: `oh-my-zsh`, `zsh-autosuggestions`, `zsh-syntax-highlighting`
-- `vim/install.sh`: `vim-plug` and Vim plugins
-- `nvim/install.sh`: installs the official Neovim release into `~/.local/opt`, links `~/.local/bin/nvim`, and runs headless `Lazy sync`
 - `ssh/install.sh`: initializes `~/.ssh` permissions and a baseline client config
 - `yq/install.sh`: installs the pinned Mike Farah yq release and its Zsh completion under `~/.local`
 - `toolchains/install.sh`: dispatches selected toolchain profiles
 
-Base topic installers run in this order: `ssh`, `zsh`, `vim`, then `nvim`. In toolchain mode, `toolchains/install.sh` runs after those base installers. A failed topic installer is reported and does not prevent the remaining topics from running, but the top-level command ultimately returns a non-zero status.
+The `ssh` and `zsh` topic installers run first. In toolchain mode, `toolchains/install.sh` runs after them; remaining topic hooks follow. A failed topic installer is reported and does not prevent the remaining installers from running, but the top-level command ultimately returns a non-zero status.
 
 Toolchain profiles are independent. Select only what a machine needs:
 
@@ -171,11 +171,10 @@ bin/dot packages --toolchains node java
 bin/dot toolchains node java
 ```
 
-When no profile is passed, `bin/dot toolchains` uses `DOTFILES_TOOLCHAINS` from `~/.toolchainsrc`. The template defaults to `nvim`.
+When no profile is passed, an explicitly set `DOTFILES_TOOLCHAINS` takes priority over `~/.toolchainsrc`, including an empty value. The template leaves it empty, so optional toolchains are opt-in. A legacy `nvim` entry left by an older template is ignored during default resolution; explicitly requesting the removed profile still reports an error.
 
 Available profiles:
 
-- `nvim`: installs Neovim Mason language tools from `nvim/config/nvim/lua/plugins/lsp.lua`
 - `node`: installs `nvm`, Node.js LTS, Corepack, `pnpm`, `yarn`, and npm global tools
 - `java`: installs `sdkman`, JDK 21 Temurin, Maven, Gradle, and Kotlin
 - `rust`: installs `rustup`, stable Rust, `rustfmt`, and `clippy`
@@ -185,21 +184,13 @@ Available profiles:
 
 Each profile can have package prerequisites under `toolchains/packages/common/<profile>.txt` and `toolchains/packages/<distro>/<profile>.txt`. The installer reads those files after the base package list and before running profile scripts.
 
-The Neovim toolchain profile aims to cover a broad mainstream baseline:
-
-- web: JavaScript, TypeScript, React, Vue, Svelte, Astro, HTML, CSS, Tailwind, GraphQL
-- backend and systems: Python, Go, Rust, Java, PHP, Ruby, C/C++, Bash, Zig
-- infra and data: Docker, Terraform, SQL, JSON, YAML, TOML, XML, Markdown
-
-Neovim is installed from the official release tarball instead of the distro package. By default the repo pins `v0.11.5` and its architecture-specific SHA-256 through `nvim/install.sh`. Every install reconciles dotfiles-managed Neovim links with the requested version. An unrelated custom `~/.local/bin/nvim` symlink is left unchanged and reported instead of being silently replaced.
-
 The YAML processor follows the same controlled-release model. `yq/install.sh` pins Mike Farah yq `v4.53.3`, validates the official binary with an architecture-specific SHA-256, and links it through `~/.local/bin/yq`. This intentionally avoids the incompatible Python/jq-wrapper package named `yq` on Debian and Ubuntu. To request another stable release, set both `DOTFILES_YQ_VERSION` and `DOTFILES_YQ_SHA256`.
 
 For a version not already pinned in the script, provide both the version and the official SHA-256 for the current architecture:
 
 ```sh
-DOTFILES_NEOVIM_VERSION=v0.11.6 \
-DOTFILES_NEOVIM_SHA256=<sha256> \
+DOTFILES_YQ_VERSION=vX.Y.Z \
+DOTFILES_YQ_SHA256=<sha256> \
 bin/dot install --user
 ```
 
@@ -228,7 +219,6 @@ Top-level dotfiles:
 
 XDG config:
 
-- `~/.config/nvim`
 - `~/.config/htop`
 - `~/.config/neofetch`
 
@@ -285,7 +275,7 @@ Rules of thumb:
 Examples:
 
 - `tmux/tmux.conf.symlink` -> `~/.tmux.conf`
-- `nvim/config/nvim/` -> `~/.config/nvim/`
+- `htop/config/htop/` -> `~/.config/htop/`
 - `git/gitconfig.symlink` -> `~/.gitconfig`
 - `shell/core/env.zsh` -> loaded by `zsh/zshrc.symlink`
 
@@ -293,7 +283,7 @@ Examples:
 
 - This repo is intended for Linux hosts.
 - Zsh uses `oh-my-zsh` with the `lambda` theme by default.
-- `EDITOR`, `VISUAL`, and `GIT_EDITOR` prefer `nvim`.
+- `EDITOR`, `VISUAL`, and `GIT_EDITOR` prefer Vim for terminal workflows and fall back to the system `vi`.
 - `PROJECTS` defaults to `$HOME/projects`, then falls back to `$HOME/Code`.
 - Cargo is loaded from `~/.cargo/env` through `~/.zshenv` when available.
 - The repo can live anywhere; bootstrap refreshes `~/.dotfiles` as a symlink to the real path.

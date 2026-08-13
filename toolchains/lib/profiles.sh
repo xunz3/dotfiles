@@ -1,7 +1,37 @@
 #!/usr/bin/env bash
 
 dotfiles_toolchain_all_profiles () {
-	printf '%s\n' nvim node java rust go python bun
+	printf '%s\n' node java rust go python bun
+}
+
+dotfiles_toolchain_profile_is_retired () {
+	case "$1" in
+		nvim) return 0 ;;
+		*) return 1 ;;
+	esac
+}
+
+dotfiles_load_toolchain_config () {
+	local dotfiles_selection_was_set=false
+	local dotfiles_selection=''
+
+	if [[ "${DOTFILES_TOOLCHAINS+x}" == "x" ]]
+	then
+		dotfiles_selection_was_set=true
+		dotfiles_selection=$DOTFILES_TOOLCHAINS
+	fi
+
+	# Load version/tool settings while keeping an explicit caller selection authoritative.
+	if [[ -f "$HOME/.toolchainsrc" ]]
+	then
+		# shellcheck source=/dev/null
+		source "$HOME/.toolchainsrc"
+	fi
+
+	if [[ "$dotfiles_selection_was_set" == "true" ]]
+	then
+		export DOTFILES_TOOLCHAINS="$dotfiles_selection"
+	fi
 }
 
 dotfiles_toolchain_default_profiles () {
@@ -10,12 +40,14 @@ dotfiles_toolchain_default_profiles () {
 		local profile
 		for profile in $DOTFILES_TOOLCHAINS
 		do
+			# Older templates selected nvim by default; ignore it only as legacy config.
+			dotfiles_toolchain_profile_is_retired "$profile" && continue
 			printf '%s\n' "$profile"
 		done
 		return
 	fi
 
-	printf '%s\n' nvim
+	return 0
 }
 
 dotfiles_toolchain_profile_exists () {

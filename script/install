@@ -355,7 +355,7 @@ record_topic_installer () {
 
 is_ordered_topic_installer () {
 	case "${1#"$DOTFILES_ROOT/"}" in
-		ssh/install.sh|zsh/install.sh|vim/install.sh|nvim/install.sh|toolchains/install.sh)
+		ssh/install.sh|zsh/install.sh|toolchains/install.sh)
 			return 0
 			;;
 		*)
@@ -367,7 +367,7 @@ is_ordered_topic_installer () {
 run_topic_installers () {
 	local installer topic
 
-	for topic in ssh zsh vim nvim
+	for topic in ssh zsh
 	do
 		installer="$DOTFILES_ROOT/$topic/install.sh"
 		if [[ -f "$installer" ]]
@@ -479,11 +479,7 @@ if [[ "$install_toolchains" == "1" ]]
 then
 	# shellcheck source=toolchains/lib/profiles.sh
 	source "$DOTFILES_ROOT/toolchains/lib/profiles.sh"
-	if [[ -f "$HOME/.toolchainsrc" ]]
-	then
-		# shellcheck source=/dev/null
-		source "$HOME/.toolchainsrc"
-	fi
+	dotfiles_load_toolchain_config
 	mapfile -t resolved_toolchain_profiles < <(dotfiles_toolchain_resolve_profiles "${toolchain_profiles[@]}")
 	for profile in "${resolved_toolchain_profiles[@]}"
 	do
