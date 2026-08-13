@@ -1,5 +1,6 @@
 # Packages shared across supported Linux distributions.
 git
+git-delta
 curl
 wget
 ca-certificates
@@ -10,11 +11,13 @@ htop
 neofetch
 ripgrep
 fzf
+direnv
+eza
+hyperfine
 less
 unzip
 zip
 jq
-yq
 bat
 grc
 gh

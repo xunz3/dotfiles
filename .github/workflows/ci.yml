@@ -16,6 +16,6 @@ jobs:
         run: |
           while IFS= read -r -d '' file; do
             bash -n "$file"
-          done < <(find . -type f \( -name '*.sh' -o -path './bin/dot' -o -path './script/bootstrap' -o -path './script/install' \) -print0)
+          done < <(find . -type f \( -name '*.sh' -o -path './bin/dot' -o -path './bin/clipboard-copy' -o -path './bin/git-pager' -o -path './script/bootstrap' -o -path './script/install' \) -print0)
       - name: Run isolated tests
         run: bash test/run.sh

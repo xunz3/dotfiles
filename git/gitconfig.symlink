@@ -20,20 +20,26 @@
 [core]
         excludesfile = ~/.gitignore
         editor = nvim
+        pager = $HOME/.dotfiles/bin/git-pager
+[interactive]
+        diffFilter = $HOME/.dotfiles/bin/git-pager --color-only
+[delta]
+        navigate = true
 [apply]
-        whitespace = nowarn
+        whitespace = warn
 [mergetool]
         keepBackup = false
 [difftool]
         prompt = false
 [help]
-        autocorrect = 1
+        autocorrect = prompt
 [push]
         # See `git help config` (search for push.default)
         # for more information on different options of the below setting.
         #
         # Setting to git 2.0 default to suppress warning message
         default = simple
+        autoSetupRemote = true
 [pull]
         ff = only
 [fetch]
@@ -50,5 +56,10 @@
         sort = version:refname
 [diff]
         algorithm = histogram
+        colorMoved = default
+[merge]
+        conflictStyle = zdiff3
+[commit]
+        verbose = true
 [init]
 	defaultBranch = main

@@ -873,6 +873,47 @@ test_shell_defaults_do_not_enable_proxies () {
 	done
 }
 
+test_clipboard_copy_selects_runtime_provider () {
+	local fake_bin="$TEST_TMP_ROOT/clipboard-bin"
+	local capture="$TEST_TMP_ROOT/clipboard-capture"
+	local args="$TEST_TMP_ROOT/clipboard-args"
+	local output copy_status
+
+	mkdir -p "$fake_bin"
+	printf '%s\n' \
+		'#!/usr/bin/env sh' \
+		'command cat > "$CLIPBOARD_CAPTURE"' > "$fake_bin/wl-copy"
+	printf '%s\n' \
+		'#!/usr/bin/env sh' \
+		'printf "%s\\n" "$*" > "$CLIPBOARD_ARGS"' \
+		'command cat > "$CLIPBOARD_CAPTURE"' > "$fake_bin/xclip"
+	chmod +x "$fake_bin/wl-copy" "$fake_bin/xclip"
+
+	printf 'wayland-copy' | PATH="$fake_bin:/usr/bin:/bin" \
+		WAYLAND_DISPLAY=wayland-0 DISPLAY=:0 \
+		CLIPBOARD_CAPTURE="$capture" CLIPBOARD_ARGS="$args" \
+		"$ROOT/bin/clipboard-copy" || fail_test 'Wayland clipboard provider failed'
+	[[ "$(< "$capture")" == 'wayland-copy' ]] || \
+		fail_test 'Wayland clipboard provider received the wrong content'
+	[[ ! -e "$args" ]] || fail_test 'X11 provider overrode the Wayland provider'
+
+	printf 'x11-copy' | env -u WAYLAND_DISPLAY \
+		PATH="$fake_bin:/usr/bin:/bin" DISPLAY=:0 \
+		CLIPBOARD_CAPTURE="$capture" CLIPBOARD_ARGS="$args" \
+		"$ROOT/bin/clipboard-copy" || fail_test 'X11 clipboard provider failed'
+	[[ "$(< "$capture")" == 'x11-copy' ]] || \
+		fail_test 'X11 clipboard provider received the wrong content'
+	[[ "$(< "$args")" == '-selection clipboard -in' ]] || \
+		fail_test 'xclip did not receive clipboard-selection arguments'
+
+	output="$(printf 'discarded' | env -u WAYLAND_DISPLAY -u DISPLAY \
+		-u WSL_INTEROP -u WSL_DISTRO_NAME PATH="$fake_bin:/usr/bin:/bin" \
+		"$ROOT/bin/clipboard-copy" 2>&1)"
+	copy_status=$?
+	[[ $copy_status -eq 1 ]] || fail_test 'missing clipboard provider did not return status 1'
+	[[ -z "$output" ]] || fail_test 'missing clipboard provider emitted unexpected output'
+}
+
 test_bootstrap_cache_environment_is_opt_in () {
 	local fixture="$TEST_TMP_ROOT/cache-bootstrap-repo"
 	local test_home="$TEST_TMP_ROOT/cache-bootstrap-home"
@@ -1740,6 +1781,99 @@ test_package_failure_reaches_exit_status () {
 	assert_contains "$output" 'package: bad'
 }
 
+test_base_packages_include_interactive_tools () {
+	local output package
+
+	output="$("$ROOT/script/install" --print 2>&1)" || {
+		printf '%s\n' "$output" >&2
+		return 1
+	}
+
+	for package in btop direnv eza git-delta hyperfine
+	do
+		grep -Fxq "$package" <<< "$output" || \
+			fail_test "base package profile is missing $package"
+	done
+	if grep -Fxq 'yq' <<< "$output"
+	then
+		fail_test 'ambiguous distro yq package remains in the system package profile'
+	fi
+}
+
+test_eza_aliases_preserve_platform_ls () {
+	local fake_bin="$TEST_TMP_ROOT/eza-alias-bin"
+	local output
+
+	mkdir -p "$fake_bin"
+	printf '%s\n' '#!/bin/sh' 'exit 0' > "$fake_bin/eza"
+	chmod +x "$fake_bin/eza"
+
+	output="$(PATH="$fake_bin:/usr/bin:/bin" zsh -f -c \
+		'source "$1"; alias ls; alias l; alias ll; alias la; alias lt' \
+		_ "$ROOT/shell/core/aliases.zsh")" || {
+		printf '%s\n' "$output" >&2
+		return 1
+	}
+
+	assert_contains "$output" "ls='ls -F --color=auto'"
+	assert_contains "$output" "l='eza --long --all --header --group-directories-first --git'"
+	assert_contains "$output" "ll='eza --long --header --group-directories-first --git'"
+	assert_contains "$output" "la='eza --all --group-directories-first'"
+	assert_contains "$output" "lt='eza --tree --level=2 --group-directories-first'"
+}
+
+test_direnv_hook_loads_in_fallback_zsh () {
+	local test_home="$TEST_TMP_ROOT/direnv-home"
+	local fake_bin="$TEST_TMP_ROOT/direnv-bin"
+	local output
+
+	mkdir -p "$test_home" "$fake_bin"
+	printf '%s\n' \
+		'#!/bin/sh' \
+		'if [ "${1:-}" = hook ] && [ "${2:-}" = zsh ]; then' \
+		'  printf "typeset -g DOTFILES_DIRENV_TEST=loaded\\n"' \
+		'fi' > "$fake_bin/direnv"
+	chmod +x "$fake_bin/direnv"
+
+	output="$(HOME="$test_home" PATH="$fake_bin:/usr/bin:/bin" \
+		DOTFILES="$ROOT" DOTFILES_USE_OH_MY_ZSH=0 \
+		ZDOTDIR="$test_home" ZSH_CACHE_DIR="$test_home/cache" \
+		zsh -f -c 'source "$1"; print -r -- "${DOTFILES_DIRENV_TEST:-missing}"' \
+		_ "$ROOT/zsh/zshrc.symlink")" || {
+		printf '%s\n' "$output" >&2
+		return 1
+	}
+
+	[[ "${output##*$'\n'}" == 'loaded' ]] || \
+		fail_test 'direnv hook was not evaluated by the fallback Zsh configuration'
+}
+
+test_git_pager_prefers_delta_and_has_filter_fallback () {
+	local fake_bin="$TEST_TMP_ROOT/git-pager-bin"
+	local args_file="$TEST_TMP_ROOT/git-pager-args"
+	local output
+
+	mkdir -p "$fake_bin"
+	ln -s "$(command -v cat)" "$fake_bin/cat"
+	printf '%s\n' \
+		'#!/bin/sh' \
+		'printf "%s\\n" "$*" > "$DOTFILES_GIT_PAGER_ARGS"' \
+		'cat' > "$fake_bin/delta"
+	chmod +x "$fake_bin/delta"
+
+	output="$(printf 'delta input\n' | PATH="$fake_bin" \
+		DOTFILES_GIT_PAGER_ARGS="$args_file" "$ROOT/bin/git-pager" --color-only)" || \
+		fail_test 'Git pager failed with Delta available'
+	[[ "$output" == 'delta input' ]] || fail_test 'Delta pager did not preserve its input'
+	[[ "$(< "$args_file")" == '--color-only' ]] || fail_test 'Git pager did not forward Delta arguments'
+
+	rm "$fake_bin/delta"
+	output="$(printf 'fallback input\n' | PATH="$fake_bin" \
+		"$ROOT/bin/git-pager" --color-only)" || \
+		fail_test 'Git diff-filter fallback failed without Delta'
+	[[ "$output" == 'fallback input' ]] || fail_test 'Git diff-filter fallback changed its input'
+}
+
 test_toolchain_profile_failure_reaches_exit_status () {
 	local test_home="$TEST_TMP_ROOT/toolchain-home"
 	local fake_bin="$TEST_TMP_ROOT/toolchain-bin"
@@ -1852,6 +1986,86 @@ test_neovim_rejects_checksum_mismatch () {
 	[[ ! -e "$test_home/.local/opt/neovim-9.9.9" ]] || fail_test 'invalid archive was installed'
 }
 
+test_yq_reconciles_existing_target_version () {
+	local test_home="$TEST_TMP_ROOT/yq-home"
+	local install_root="$test_home/.local/opt"
+	local completion_root="$test_home/.local/share/zsh/site-functions"
+	local output
+
+	mkdir -p "$install_root/yq-4.53.2/completions" \
+		"$install_root/yq-4.53.3/completions" "$test_home/.local/bin" \
+		"$completion_root"
+	printf '%s\n' '#!/bin/sh' 'exit 0' > "$install_root/yq-4.53.3/yq"
+	printf '#compdef yq\n' > "$install_root/yq-4.53.3/completions/_yq"
+	chmod +x "$install_root/yq-4.53.3/yq"
+	ln -s "$install_root/yq-4.53.2" "$install_root/yq-current"
+	ln -s "$install_root/yq-4.53.2/yq" "$test_home/.local/bin/yq"
+	ln -s "$install_root/yq-4.53.2/completions/_yq" "$completion_root/_yq"
+
+	output="$(HOME="$test_home" "$ROOT/yq/install.sh" 2>&1)" || {
+		printf '%s\n' "$output" >&2
+		return 1
+	}
+
+	[[ "$(readlink "$install_root/yq-current")" == "$install_root/yq-4.53.3" ]] || \
+		fail_test 'yq-current did not switch to the requested version'
+	[[ "$(readlink "$test_home/.local/bin/yq")" == "$install_root/yq-current/yq" ]] || \
+		fail_test '~/.local/bin/yq was not reconciled'
+	[[ "$(readlink "$completion_root/_yq")" == \
+		"$install_root/yq-current/completions/_yq" ]] || \
+		fail_test 'the yq Zsh completion was not reconciled'
+	assert_contains "$output" 'selected yq 4.53.3'
+}
+
+test_yq_preserves_unmanaged_binary_symlink () {
+	local test_home="$TEST_TMP_ROOT/yq-unmanaged-home"
+	local install_root="$test_home/.local/opt"
+	local custom_bin="$test_home/custom/yq"
+	local output status
+
+	mkdir -p "$install_root/yq-4.53.3/completions" "$test_home/.local/bin" \
+		"$(dirname "$custom_bin")"
+	printf '%s\n' '#!/bin/sh' 'exit 0' > "$install_root/yq-4.53.3/yq"
+	printf '#compdef yq\n' > "$install_root/yq-4.53.3/completions/_yq"
+	printf '%s\n' '#!/bin/sh' 'exit 0' > "$custom_bin"
+	chmod +x "$install_root/yq-4.53.3/yq" "$custom_bin"
+	ln -s "$custom_bin" "$test_home/.local/bin/yq"
+
+	output="$(HOME="$test_home" "$ROOT/yq/install.sh" 2>&1)"
+	status=$?
+	[[ $status -ne 0 ]] || fail_test 'yq install silently accepted an unmanaged binary link'
+	[[ "$(readlink "$test_home/.local/bin/yq")" == "$custom_bin" ]] || \
+		fail_test 'yq install replaced the unmanaged binary link'
+	[[ ! -e "$install_root/yq-current" && ! -L "$install_root/yq-current" ]] || \
+		fail_test 'yq install partially changed the selected version before refusing the custom binary'
+	assert_contains "$output" 'points to an unmanaged target; leaving it unchanged'
+}
+
+test_yq_rejects_checksum_mismatch () {
+	local test_home="$TEST_TMP_ROOT/yq-checksum-home"
+	local fake_bin="$TEST_TMP_ROOT/yq-checksum-bin"
+	local output status
+
+	mkdir -p "$test_home" "$fake_bin"
+	printf '%s\n' \
+		'#!/usr/bin/env bash' \
+		'output=' \
+		'while [[ $# -gt 0 ]]; do' \
+		'  if [[ "$1" == -o ]]; then output=$2; shift 2; else shift; fi' \
+		'done' \
+		'printf "not a yq binary\\n" > "$output"' > "$fake_bin/curl"
+	chmod +x "$fake_bin/curl"
+
+	output="$(HOME="$test_home" PATH="$fake_bin:$PATH" DOTFILES_YQ_VERSION=v9.9.9 \
+		DOTFILES_YQ_SHA256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+		"$ROOT/yq/install.sh" 2>&1)"
+	status=$?
+
+	[[ $status -eq 1 ]] || fail_test "expected status 1, got $status"
+	assert_contains "$output" 'binary checksum mismatch'
+	[[ ! -e "$test_home/.local/opt/yq-9.9.9" ]] || fail_test 'invalid yq binary was installed'
+}
+
 run_test 'bootstrap creates unique backup sessions' test_bootstrap_backups_are_unique
 run_test 'bootstrap preserves dangling local links' test_bootstrap_preserves_dangling_local_link
 run_test 'cache env exports variables and creates directories' test_cache_env_generates_expected_environment
@@ -1869,6 +2083,7 @@ run_test 'cache env preserves a final compatibility symlink replacement' test_ca
 run_test 'cache env publishes versions atomically' test_cache_env_version_publication_is_atomic
 run_test 'cache environment consumers reject symlink targets' test_cache_environment_consumers_reject_symlink_targets
 run_test 'shell defaults do not enable proxies' test_shell_defaults_do_not_enable_proxies
+run_test 'clipboard copy selects a runtime provider' test_clipboard_copy_selects_runtime_provider
 run_test 'bootstrap cache configuration is opt-in' test_bootstrap_cache_environment_is_opt_in
 run_test 'bootstrap rejects invalid cache workspaces before mutation' test_bootstrap_rejects_invalid_cache_workspace_before_mutation
 run_test 'install generates and loads cache environment' test_install_cache_workspace_generates_and_loads_environment
@@ -1892,11 +2107,18 @@ run_test 'setup forwards skip mode to bootstrap' test_setup_forwards_skip_to_boo
 run_test 'setup routes flags after toolchain profiles' test_setup_routes_flags_after_toolchain_profiles
 run_test 'user mode skips manager and aggregates topics' test_user_mode_skips_manager_and_reports_topics
 run_test 'package failures reach the top-level status' test_package_failure_reaches_exit_status
+run_test 'base package profile includes interactive tools' test_base_packages_include_interactive_tools
+run_test 'eza aliases preserve the platform ls command' test_eza_aliases_preserve_platform_ls
+run_test 'direnv hook loads in fallback Zsh' test_direnv_hook_loads_in_fallback_zsh
+run_test 'Git pager prefers Delta and falls back for filters' test_git_pager_prefers_delta_and_has_filter_fallback
 run_test 'toolchain profile failures reach the top-level status' test_toolchain_profile_failure_reaches_exit_status
 run_test 'downloaded script failures reach the profile' test_remote_script_runner_propagates_status
 run_test 'Neovim reconciles an existing target version' test_neovim_reconciles_existing_target_version
 run_test 'Neovim preserves an unmanaged binary symlink' test_neovim_preserves_unmanaged_binary_symlink
 run_test 'Neovim rejects checksum mismatches' test_neovim_rejects_checksum_mismatch
+run_test 'yq reconciles an existing target version' test_yq_reconciles_existing_target_version
+run_test 'yq preserves an unmanaged binary symlink' test_yq_preserves_unmanaged_binary_symlink
+run_test 'yq rejects checksum mismatches' test_yq_rejects_checksum_mismatch
 
 printf '\nResult: %d passed, %d failed\n' "$passed" "$failed"
 [[ $failed -eq 0 ]]

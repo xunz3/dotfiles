@@ -1,0 +1,22 @@
+#!/bin/sh
+
+# Delta is the preferred human-facing Git pager and interactive diff filter.
+# Keep Git usable in user-only installs or after a package installation failure.
+if command -v delta >/dev/null 2>&1
+then
+	exec delta "$@"
+fi
+
+# Arguments such as --color-only mean Git is invoking this as a diff filter,
+# where starting an interactive pager would be incorrect.
+if [ "$#" -gt 0 ]
+then
+	exec cat
+fi
+
+if command -v less >/dev/null 2>&1
+then
+	exec less -FRX
+fi
+
+exec cat

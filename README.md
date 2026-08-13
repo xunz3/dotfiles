@@ -91,6 +91,35 @@ script/bootstrap --skip-gitconfig
 script/bootstrap --cache-workspace /data4/zhangxun
 ```
 
+## Interactive Workflow
+
+Zsh keeps startup work small and exposes fuzzy navigation only in a real terminal:
+
+- `Ctrl-R`: fuzzy history search
+- `Ctrl-T`: insert a file or directory selected with fzf
+- `Alt-C`: change to a directory selected with fzf
+- `Tab`: grouped completion with exact matching first, then case-insensitive and separator-aware matching
+- `node`, `npm`, `npx`, `pnpm`, `yarn`, `corepack`, or `nvm`: load NVM on first use rather than on every shell start
+- a command prefixed with a space: omit it from persistent history
+- `l` / `ll` / `la`: eza long, normal, and all-file views when eza is installed; `ls` remains the platform command
+- `lt`: a two-level eza tree without requiring icon fonts
+- entering a directory with `.envrc`: direnv blocks it until the file has been reviewed and approved with `direnv allow`
+
+Tmux uses `Ctrl-A` as its prefix. The main workflow is:
+
+- `|` / `-`: split horizontally / vertically in the current pane's directory
+- `h` / `j` / `k` / `l`: move between panes; uppercase variants resize repeatedly
+- `c` / `Tab` / `Space`: new window / last window / next layout
+- `s` / `w`: full-pane session / window chooser
+- `m`: toggle synchronized input and show its new state
+- `Enter`: enter copy mode; `v` selects, `Ctrl-V` toggles rectangle mode, and `y` or `Enter` copies
+- `x` / `X`: confirm before killing a pane / window
+- `r`: reload the tmux config
+
+Clipboard copy is shared by tmux and `pubkey`, with Wayland, X11, macOS, and WSL providers detected at runtime. See [the interactive configuration review](docs/interactive-config-review.md) for measurements, alternatives considered, and the rationale behind these defaults.
+
+Git uses Delta for human-facing diffs and interactive staging when it is installed. Within a long diff, `n` and `N` move between files and commits. A repository-owned pager wrapper falls back to `less` or plain output if the package is unavailable, so user-only and partially completed installs still have working Git output.
+
 ## Optional Cache Workspace
 
 `--cache-workspace DIR` is an explicit machine-local profile. It creates the cache tree under `DIR/cache` and writes a mode-`0600` immutable profile under `${XDG_CONFIG_HOME:-~/.config}/dotfiles/cache-env.d/`. It also maintains an independent `cache-env.sh` compatibility copy while that path remains managed, without overwriting a concurrently replaced path. `~/.zshenv` and `script/install` select the newest complete immutable profile, so activation is atomic and the first setup run already uses the selected locations.
@@ -121,7 +150,7 @@ By default, package installation uses the system package manager through `sudo` 
 
 Package and topic failures are accumulated so the remaining independent installers can run. The final summary lists failures, and `dot install` / `dot setup` returns a non-zero status if any required package, topic, or selected toolchain profile failed.
 
-The base profile includes a practical server/workstation baseline: Git, zsh, Vim, tmux, htop, Neovim support tools, GitHub CLI, ripgrep/fzf, JSON/YAML tools, archive tools, rsync, tree, file, lsof, ncdu, btop, OpenSSH client, DNS/IP/ping/netcat utilities, Python 3, and build essentials for the current distro.
+The base profile includes a practical server/workstation baseline: Git with Delta, zsh, Vim, tmux, htop/btop, Neovim support tools, GitHub CLI, ripgrep/fzf, direnv, eza, hyperfine, JSON/YAML tools, archive tools, rsync, tree, file, lsof, ncdu, OpenSSH client, DNS/IP/ping/netcat utilities, Python 3, and build essentials for the current distro.
 
 Base install hooks:
 
@@ -129,6 +158,7 @@ Base install hooks:
 - `vim/install.sh`: `vim-plug` and Vim plugins
 - `nvim/install.sh`: installs the official Neovim release into `~/.local/opt`, links `~/.local/bin/nvim`, and runs headless `Lazy sync`
 - `ssh/install.sh`: initializes `~/.ssh` permissions and a baseline client config
+- `yq/install.sh`: installs the pinned Mike Farah yq release and its Zsh completion under `~/.local`
 - `toolchains/install.sh`: dispatches selected toolchain profiles
 
 Base topic installers run in this order: `ssh`, `zsh`, `vim`, then `nvim`. In toolchain mode, `toolchains/install.sh` runs after those base installers. A failed topic installer is reported and does not prevent the remaining topics from running, but the top-level command ultimately returns a non-zero status.
@@ -162,6 +192,8 @@ The Neovim toolchain profile aims to cover a broad mainstream baseline:
 - infra and data: Docker, Terraform, SQL, JSON, YAML, TOML, XML, Markdown
 
 Neovim is installed from the official release tarball instead of the distro package. By default the repo pins `v0.11.5` and its architecture-specific SHA-256 through `nvim/install.sh`. Every install reconciles dotfiles-managed Neovim links with the requested version. An unrelated custom `~/.local/bin/nvim` symlink is left unchanged and reported instead of being silently replaced.
+
+The YAML processor follows the same controlled-release model. `yq/install.sh` pins Mike Farah yq `v4.53.3`, validates the official binary with an architecture-specific SHA-256, and links it through `~/.local/bin/yq`. This intentionally avoids the incompatible Python/jq-wrapper package named `yq` on Debian and Ubuntu. To request another stable release, set both `DOTFILES_YQ_VERSION` and `DOTFILES_YQ_SHA256`.
 
 For a version not already pinned in the script, provide both the version and the official SHA-256 for the current architecture:
 

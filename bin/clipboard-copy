@@ -1,0 +1,31 @@
+#!/usr/bin/env sh
+# Copy stdin to the best clipboard provider available on this machine.
+
+if [ -n "${WAYLAND_DISPLAY:-}" ] && command -v wl-copy >/dev/null 2>&1; then
+  exec wl-copy
+fi
+
+if [ -n "${DISPLAY:-}" ] && command -v xclip >/dev/null 2>&1; then
+  exec xclip -selection clipboard -in
+fi
+
+if [ -n "${DISPLAY:-}" ] && command -v xsel >/dev/null 2>&1; then
+  exec xsel --clipboard --input
+fi
+
+if command -v pbcopy >/dev/null 2>&1; then
+  exec pbcopy
+fi
+
+if command -v clip.exe >/dev/null 2>&1; then
+  exec clip.exe
+fi
+
+if [ -n "${WSL_INTEROP:-}${WSL_DISTRO_NAME:-}" ] && \
+  [ -x /mnt/c/Windows/System32/clip.exe ]; then
+  exec /mnt/c/Windows/System32/clip.exe
+fi
+
+# Consume stdin so tmux copy-pipe can still finish and retain its own buffer.
+command cat >/dev/null
+exit 1

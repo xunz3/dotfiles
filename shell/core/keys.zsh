@@ -6,19 +6,13 @@ copy_pubkey() {
     return 1
   fi
 
-  if (( $+commands[wl-copy] )); then
-    wl-copy < "$key_file"
-  elif (( $+commands[xclip] )); then
-    xclip -selection clipboard < "$key_file"
-  elif (( $+commands[pbcopy] )); then
-    pbcopy < "$key_file"
+  if (( $+commands[clipboard-copy] )) && clipboard-copy < "$key_file"; then
+    echo "=> Public key copied to clipboard."
   else
-    cat "$key_file"
+    command cat "$key_file"
     echo "=> No clipboard tool found; printed public key instead."
     return 0
   fi
-
-  echo "=> Public key copied to clipboard."
 }
 
 alias pubkey='copy_pubkey'
