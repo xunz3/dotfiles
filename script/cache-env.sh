@@ -4,8 +4,11 @@
 
 set -euo pipefail
 
-managed_marker='# Managed by dotfiles script/cache-env.sh.'
-managed_end_marker='# End managed dotfiles cache environment.'
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+# shellcheck source=script/lib/cache-profile.sh
+source "$script_dir/lib/cache-profile.sh"
+managed_marker=$DOTFILES_CACHE_MANAGED_MARKER
+managed_end_marker=$DOTFILES_CACHE_MANAGED_END_MARKER
 
 fail () {
 	printf 'cache env: %s\n' "$1" >&2
@@ -270,51 +273,11 @@ then
 	fail "could not create cache environment version directory: $version_dir"
 fi
 
-managed_version_file_is_complete () {
-	local candidate=$1
-	local marker='' end_marker='' line='' first_line=true
-
-	[[ -e "$candidate" && ! -L "$candidate" && -f "$candidate" &&
-		-r "$candidate" ]] || return 1
-	while IFS= read -r line || [[ -n "$line" ]]
-	do
-		if [[ "$first_line" == "true" ]]
-		then
-			marker=$line
-			first_line=false
-		fi
-		end_marker=$line
-	done < "$candidate"
-
-	[[ "$marker" == "$managed_marker" &&
-		"$end_marker" == "$managed_end_marker" ]]
-}
-
-find_latest_managed_version () {
-	local candidate candidate_name version_digits
-
-	for candidate in "$version_dir"/v*.sh
-	do
-		candidate_name=${candidate##*/}
-		version_digits=${candidate_name#v}
-		version_digits=${version_digits%.sh}
-		[[ ${#version_digits} -eq 18 &&
-			"$version_digits" != *[!0-9]* ]] || continue
-		managed_version_file_is_complete "$candidate" || continue
-		if [[ -z "$latest_version_name" ||
-			"$candidate_name" > "$latest_version_name" ]]
-		then
-			latest_version_name=$candidate_name
-			latest_version_file=$candidate
-		fi
-	done
-
-	[[ -n "$latest_version_file" ]]
-}
-
-if find_latest_managed_version
+if dotfiles_cache_find_latest_version "$version_dir"
 then
 	managed_versions_present=true
+	latest_version_file=$DOTFILES_CACHE_PROFILE
+	latest_version_name=${latest_version_file##*/}
 fi
 
 if [[ ! -e "$config_file" && ! -L "$config_file" ]]
@@ -523,7 +486,7 @@ else
 		[[ -e "$candidate" || -L "$candidate" ]] || continue
 		candidate_name=${candidate##*/}
 		if [[ "$candidate_name" =~ ^v([0-9]{18})\.sh$ ]] &&
-			managed_version_file_is_complete "$candidate"
+			dotfiles_cache_profile_is_complete "$candidate"
 		then
 			version_number=$((10#${BASH_REMATCH[1]}))
 			[[ "$version_number" -gt "$max_version" ]] &&

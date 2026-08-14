@@ -6,6 +6,8 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 DOTFILES_ROOT=$(pwd -P)
+# shellcheck source=script/lib/cache-profile.sh
+source "$DOTFILES_ROOT/script/lib/cache-profile.sh"
 
 dry_run=false
 event_file=''
@@ -446,47 +448,6 @@ decode_hex () {
 	printf '%s' "$decoded"
 }
 
-find_latest_cache_profile () {
-	local version_dir=$1 candidate candidate_name version_digits latest_name=''
-	local marker='' end_marker='' line='' first_line=false
-
-	CACHE_LATEST_PROFILE=''
-	[[ -d "$version_dir" && ! -L "$version_dir" ]] || return 1
-	for candidate in "$version_dir"/v*.sh
-	do
-		[[ -e "$candidate" && ! -L "$candidate" && -f "$candidate" &&
-			-r "$candidate" ]] || continue
-		candidate_name=${candidate##*/}
-		version_digits=${candidate_name#v}
-		version_digits=${version_digits%.sh}
-		[[ ${#version_digits} -eq 18 &&
-			"$version_digits" != *[!0-9]* ]] || continue
-		marker=''
-		end_marker=''
-		line=''
-		first_line=true
-		while IFS= read -r line || [[ -n "$line" ]]
-		do
-			if [[ "$first_line" == "true" ]]
-			then
-				marker=$line
-				first_line=false
-			fi
-			end_marker=$line
-		done < "$candidate"
-		[[ "$marker" == '# Managed by dotfiles script/cache-env.sh.' &&
-			"$end_marker" == '# End managed dotfiles cache environment.' ]] ||
-			continue
-		if [[ -z "$latest_name" || "$candidate_name" > "$latest_name" ]]
-		then
-			latest_name=$candidate_name
-			CACHE_LATEST_PROFILE=$candidate
-		fi
-	done
-
-	[[ -n "$CACHE_LATEST_PROFILE" ]]
-}
-
 detect_cache_workspace () {
 	local config_home="${XDG_CONFIG_HOME:-$HOME/.config}"
 	local cache_root version_dir cache_file marker='' metadata='' decoded=''
@@ -513,9 +474,9 @@ detect_cache_workspace () {
 		CACHE_CONFIG_FILE=$version_dir
 		return
 	fi
-	if find_latest_cache_profile "$version_dir"
+	if dotfiles_cache_find_latest_version "$version_dir"
 	then
-		cache_file=$CACHE_LATEST_PROFILE
+		cache_file=$DOTFILES_CACHE_PROFILE
 		CACHE_CONFIG_FILE=$cache_file
 	elif [[ ! -e "$cache_file" && ! -L "$cache_file" ]]
 	then
@@ -540,7 +501,7 @@ detect_cache_workspace () {
 
 	mapfile -t header < <(head -n 2 -- "$cache_file")
 	marker=${header[0]:-}
-	if [[ "$marker" != '# Managed by dotfiles script/cache-env.sh.' ]]
+	if [[ "$marker" != "$DOTFILES_CACHE_MANAGED_MARKER" ]]
 	then
 		CACHE_PROFILE_STATUS='blocked'
 		CACHE_PROFILE_DETAIL='cache-env.sh is not managed by dotfiles'

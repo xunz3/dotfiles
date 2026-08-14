@@ -59,6 +59,7 @@ That keeps identity, secrets, proxies, and machine-specific paths out of the tra
 ## Daily Commands
 
 ```sh
+bin/dot                   # show command help (no changes are made)
 bin/dot init              # interactive guided setup
 bin/dot init --dry-run    # review TUI choices without installing
 bin/dot setup             # bootstrap + package install
@@ -138,6 +139,8 @@ The profile configures:
 Because `HF_HOME` normally also contains authentication state, the generated profile sets `HF_TOKEN_PATH` to `${XDG_CONFIG_HOME:-~/.config}/huggingface/token`, outside the disposable cache tree.
 
 The workspace must be an absolute path other than `/`; it is resolved before use so `..` and symbolic links cannot bypass the root-directory guard. `XDG_CONFIG_HOME`, when set, must also be absolute. Paths with spaces and shell metacharacters are quoted safely. A new immutable profile is published only when its generated content changes, so repeating the same setup does not accumulate duplicate versions. Changing the workspace creates a new tree and leaves prior profiles and cache data in place. It never overwrites an unrelated file or symbolic link at the compatibility path.
+
+The version naming, completeness markers, fallback behavior, and publication guarantees are defined in the [cache profile protocol](docs/cache-profile-protocol.md). All four producers and consumers share one selector implementation.
 
 `TMPDIR`, Torch extensions, Triton, and uv can be sensitive to mount behavior. Prefer a local, writable filesystem; a `noexec` or slow network mount can break compiled extensions or reduce cache performance. If the configured `tmp` directory later disappears or becomes unwritable, new shells stop exporting that `TMPDIR` and fall back to the system default.
 

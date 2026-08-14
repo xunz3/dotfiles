@@ -40,6 +40,27 @@ assert_nul_args () {
 	done
 }
 
+copy_cache_profile_helper () {
+	local fixture=$1
+
+	mkdir -p "$fixture/script/lib"
+	cp "$ROOT/script/lib/cache-profile.sh" "$fixture/script/lib/cache-profile.sh"
+}
+
+copy_cache_env_script () {
+	local fixture=$1
+
+	cp "$ROOT/script/cache-env.sh" "$fixture/script/cache-env.sh"
+	copy_cache_profile_helper "$fixture"
+}
+
+copy_setup_tui_script () {
+	local fixture=$1
+
+	cp -- "$ROOT/script/setup-tui.sh" "$fixture/script/setup-tui.sh"
+	copy_cache_profile_helper "$fixture"
+}
+
 run_test () {
 	local name=$1
 	shift
@@ -63,7 +84,7 @@ test_bootstrap_backups_are_unique () {
 
 	mkdir -p "$fixture/script" "$fixture/topic" "$test_home"
 	cp "$ROOT/script/bootstrap" "$fixture/script/bootstrap"
-	cp "$ROOT/script/cache-env.sh" "$fixture/script/cache-env.sh"
+	copy_cache_env_script "$fixture"
 	printf 'tracked\n' > "$fixture/topic/foo.symlink"
 	printf 'original\n' > "$test_home/.foo"
 	printf 'legacy backup\n' > "$test_home/.foo.backup"
@@ -111,7 +132,7 @@ test_bootstrap_preserves_dangling_local_link () {
 
 	mkdir -p "$fixture/script" "$fixture/local" "$test_home"
 	cp "$ROOT/script/bootstrap" "$fixture/script/bootstrap"
-	cp "$ROOT/script/cache-env.sh" "$fixture/script/cache-env.sh"
+	copy_cache_env_script "$fixture"
 	printf 'template\n' > "$fixture/local/localrc.example"
 	ln -s "$test_home/missing-localrc" "$test_home/.localrc"
 
@@ -686,12 +707,14 @@ test_cache_env_version_publication_is_atomic () {
 	local new_workspace="$TEST_TMP_ROOT/cache-atomic-new"
 	local incomplete_sentinel="$test_home/incomplete-profile-sourced"
 	local violation="$test_home/precommit-profile-visible"
+	local events="$TEST_TMP_ROOT/cache-atomic-events"
 	local output status mode attempt_workspace zsh_workspace
 	local -a profiles
 
 	mkdir -p "$fixture/script" "$fixture/probe" "$test_home" "$fake_bin"
+	ln -s "$ROOT/zsh/zshenv.symlink" "$test_home/.zshenv"
 	cp "$ROOT/script/install" "$fixture/script/install"
-	cp "$ROOT/script/cache-env.sh" "$fixture/script/cache-env.sh"
+	copy_cache_env_script "$fixture"
 	printf '%s\n' \
 		'#!/usr/bin/env bash' \
 		'printf "%s\n" "${WORKSPACE:-missing}" > "$HOME/install-workspace.log"' \
@@ -710,9 +733,10 @@ test_cache_env_version_publication_is_atomic () {
 		'fi' \
 		'exit 1' > "$fake_bin/ln"
 	chmod +x "$fake_bin/ln"
+	printf '%s\n' quit > "$events"
 
 	assert_cache_consumers_use_workspace () {
-		local expected=$1 context=$2 install_output
+		local expected=$1 context=$2 install_output tui_output
 
 		install_output="$(HOME="$test_home" XDG_CONFIG_HOME="$config_home" \
 			"$fixture/script/install" --user 2>&1)" || {
@@ -723,11 +747,24 @@ test_cache_env_version_publication_is_atomic () {
 			fail_test "script/install selected the wrong cache profile for $context"
 
 		zsh_workspace="$(HOME="$test_home" XDG_CONFIG_HOME="$config_home" \
-			zsh -f -c 'source "$1"; print -r -- "${WORKSPACE:-missing}"' \
-			_ "$ROOT/zsh/zshenv.symlink")" || \
+			zsh -f -c '
+				unsetopt nullglob
+				source "$1"
+				[[ ! -o nullglob ]] || exit 1
+				(( ${+functions[dotfiles_cache_select_profile]} == 0 )) || exit 1
+				print -r -- "${WORKSPACE:-missing}"
+			' \
+			_ "$test_home/.zshenv")" || \
 			fail_test "zshenv failed while checking $context"
 		[[ "$zsh_workspace" == "$expected" ]] || \
 			fail_test "zshenv selected the wrong cache profile for $context"
+
+		tui_output="$(HOME="$test_home" XDG_CONFIG_HOME="$config_home" \
+			"$ROOT/script/setup-tui.sh" --events "$events" --plain 2>&1)" || {
+			printf '%s\n' "$tui_output" >&2
+			fail_test "setup TUI failed while checking $context"
+		}
+		assert_contains "$tui_output" "$expected/cache"
 	}
 
 	HOME="$test_home" XDG_CONFIG_HOME="$config_home" \
@@ -802,7 +839,7 @@ test_cache_environment_consumers_reject_symlink_targets () {
 
 	mkdir -p "$fixture/script" "$config_home/dotfiles" "$test_home"
 	cp "$ROOT/script/install" "$fixture/script/install"
-	cp "$ROOT/script/cache-env.sh" "$fixture/script/cache-env.sh"
+	copy_cache_env_script "$fixture"
 	printf '%s\n' \
 		'# Managed by dotfiles script/cache-env.sh.' \
 		'touch "$HOME/cache-env-sourced"' > "$payload"
@@ -924,7 +961,7 @@ test_bootstrap_cache_environment_is_opt_in () {
 
 	mkdir -p "$fixture/script" "$test_home"
 	cp "$ROOT/script/bootstrap" "$fixture/script/bootstrap"
-	cp "$ROOT/script/cache-env.sh" "$fixture/script/cache-env.sh"
+	copy_cache_env_script "$fixture"
 
 	output="$(HOME="$test_home" XDG_CONFIG_HOME="$config_home" \
 		"$fixture/script/bootstrap" --skip --skip-gitconfig 2>&1)" || {
@@ -947,7 +984,7 @@ test_bootstrap_rejects_invalid_cache_workspace_before_mutation () {
 
 	mkdir -p "$fixture/script" "$fixture/git" "$fixture/local"
 	cp "$ROOT/script/bootstrap" "$fixture/script/bootstrap"
-	cp "$ROOT/script/cache-env.sh" "$fixture/script/cache-env.sh"
+	copy_cache_env_script "$fixture"
 	cp "$ROOT/git/gitconfig.local.symlink.example" \
 		"$fixture/git/gitconfig.local.symlink.example"
 	cp "$ROOT/local/localrc.example" "$fixture/local/localrc.example"
@@ -1001,7 +1038,7 @@ test_install_cache_workspace_generates_and_loads_environment () {
 
 	mkdir -p "$fixture/script" "$fixture/probe" "$test_home"
 	cp "$ROOT/script/install" "$fixture/script/install"
-	cp "$ROOT/script/cache-env.sh" "$fixture/script/cache-env.sh"
+	copy_cache_env_script "$fixture"
 	printf '%s\n' \
 		'#!/usr/bin/env bash' \
 		'printf "%s\n" "${CACHE_HOME:-missing}" > "$HOME/cache-home.log"' > "$fixture/probe/install.sh"
@@ -1028,7 +1065,7 @@ test_setup_routes_cache_workspace_before_install () {
 	cp "$ROOT/bin/dot" "$fixture/bin/dot"
 	cp "$ROOT/script/bootstrap" "$fixture/script/bootstrap"
 	cp "$ROOT/script/install" "$fixture/script/install"
-	cp "$ROOT/script/cache-env.sh" "$fixture/script/cache-env.sh"
+	copy_cache_env_script "$fixture"
 	printf '%s\n' \
 		'#!/usr/bin/env bash' \
 		'printf "%s\n" "${CACHE_HOME:-missing}" > "$HOME/setup-cache-home.log"' > "$fixture/probe/install.sh"
@@ -1089,7 +1126,7 @@ test_setup_tui_accepts_user_in_any_position () {
 	mkdir -p "$fixture/bin" "$fixture/script" "$fixture/toolchains/lib" \
 		"$test_home" "$fake_bin"
 	cp "$ROOT/bin/dot" "$fixture/bin/dot"
-	cp "$ROOT/script/setup-tui.sh" "$fixture/script/setup-tui.sh"
+	copy_setup_tui_script "$fixture"
 	cp "$ROOT/toolchains/lib/profiles.sh" "$fixture/toolchains/lib/profiles.sh"
 	printf '%s\n' '#!/usr/bin/env bash' 'exit 0' > "$fake_bin/apt-get"
 	printf '%s\n' '#!/usr/bin/env bash' 'exit 0' > "$fake_bin/sudo"
@@ -1130,7 +1167,7 @@ test_tui_event_flow_executes_exact_setup_arguments () {
 
 	mkdir -p "$fixture/bin" "$fixture/script" "$fixture/toolchains/lib" \
 		"$fixture/sample" "$test_home" "$fake_bin"
-	cp "$ROOT/script/setup-tui.sh" "$fixture/script/setup-tui.sh"
+	copy_setup_tui_script "$fixture"
 	cp "$ROOT/toolchains/lib/profiles.sh" "$fixture/toolchains/lib/profiles.sh"
 	printf 'managed\n' > "$fixture/sample/sample.symlink"
 	printf 'existing\n' > "$test_home/.sample"
@@ -1326,7 +1363,7 @@ test_tui_overwrite_uses_confirmed_force_paths () {
 
 	mkdir -p "$fixture/bin" "$fixture/script" "$fixture/toolchains/lib" \
 		"$fixture/first" "$fixture/second" "$test_home" "$fake_bin"
-	cp "$ROOT/script/setup-tui.sh" "$fixture/script/setup-tui.sh"
+	copy_setup_tui_script "$fixture"
 	cp "$ROOT/toolchains/lib/profiles.sh" "$fixture/toolchains/lib/profiles.sh"
 	printf 'managed first\n' > "$fixture/first/first.symlink"
 	printf 'managed second\n' > "$fixture/second/second.symlink"
@@ -1381,7 +1418,7 @@ test_tui_sudo_failure_returns_to_user_only_scope () {
 	local output
 
 	mkdir -p "$fixture/bin" "$fixture/script" "$fixture/toolchains/lib" "$test_home" "$fake_bin"
-	cp "$ROOT/script/setup-tui.sh" "$fixture/script/setup-tui.sh"
+	copy_setup_tui_script "$fixture"
 	cp "$ROOT/toolchains/lib/profiles.sh" "$fixture/toolchains/lib/profiles.sh"
 	printf 'existing git config\n' > "$test_home/.gitconfig.local"
 	printf '%s\n' \
@@ -1433,6 +1470,19 @@ test_init_without_tty_fails_clearly () {
 	assert_contains "$output" 'bin/dot setup --help'
 }
 
+test_dot_without_command_shows_help () {
+	local output status
+
+	output="$("$ROOT/bin/dot" 2>&1)"
+	status=$?
+
+	[[ $status -eq 0 ]] || fail_test "bare bin/dot returned status $status"
+	assert_contains "$output" 'dot -- dotfiles management'
+	assert_contains "$output" 'Usage:'
+	[[ "$output" != *'git pull'* ]] || fail_test 'bare bin/dot started an update'
+	[[ "$output" != *'installing packages'* ]] || fail_test 'bare bin/dot started package installation'
+}
+
 test_bootstrap_rejects_multiple_conflict_modes () {
 	local fixture="$TEST_TMP_ROOT/conflict-mode-repo"
 	local test_home="$TEST_TMP_ROOT/conflict-mode-home"
@@ -1442,7 +1492,7 @@ test_bootstrap_rejects_multiple_conflict_modes () {
 
 	mkdir -p "$fixture/script" "$test_home"
 	cp "$ROOT/script/bootstrap" "$fixture/script/bootstrap"
-	cp "$ROOT/script/cache-env.sh" "$fixture/script/cache-env.sh"
+	copy_cache_env_script "$fixture"
 
 	for index in "${!first_modes[@]}"
 	do
@@ -1467,7 +1517,7 @@ test_bootstrap_rejects_relative_state_home_before_mutation () {
 	mkdir -p "$fixture/script" "$fixture/topic" "$fixture/git" "$fixture/local" \
 		"$test_home"
 	cp "$ROOT/script/bootstrap" "$fixture/script/bootstrap"
-	cp "$ROOT/script/cache-env.sh" "$fixture/script/cache-env.sh"
+	copy_cache_env_script "$fixture"
 	cp "$ROOT/git/gitconfig.local.symlink.example" \
 		"$fixture/git/gitconfig.local.symlink.example"
 	cp "$ROOT/local/localrc.example" "$fixture/local/localrc.example"
@@ -1540,7 +1590,7 @@ test_bootstrap_does_not_follow_racing_dotfiles_alias () {
 
 	mkdir -p "$fixture/script" "$test_home" "$fake_bin" "$race_dir"
 	cp "$ROOT/script/bootstrap" "$fixture/script/bootstrap"
-	cp "$ROOT/script/cache-env.sh" "$fixture/script/cache-env.sh"
+	copy_cache_env_script "$fixture"
 	printf 'race destination sentinel\n' > "$race_dir/sentinel"
 
 	real_ln="$(command -v ln)"
@@ -1589,7 +1639,7 @@ test_bootstrap_force_path_only_overwrites_confirmed_target () {
 	mkdir -p "$fixture/script" "$fixture/topic" "$fixture/xdg/config/unconfirmed" \
 		"$test_home/.config/unconfirmed"
 	cp "$ROOT/script/bootstrap" "$fixture/script/bootstrap"
-	cp "$ROOT/script/cache-env.sh" "$fixture/script/cache-env.sh"
+	copy_cache_env_script "$fixture"
 	printf 'managed confirmed\n' > "$fixture/topic/confirmed.symlink"
 	printf 'managed unconfirmed\n' > "$fixture/xdg/config/unconfirmed/config"
 	printf 'original confirmed\n' > "$confirmed_target"
@@ -1617,7 +1667,7 @@ test_bootstrap_preserves_git_identity_characters () {
 
 	mkdir -p "$fixture/script" "$fixture/git" "$test_home"
 	cp "$ROOT/script/bootstrap" "$fixture/script/bootstrap"
-	cp "$ROOT/script/cache-env.sh" "$fixture/script/cache-env.sh"
+	copy_cache_env_script "$fixture"
 	cp "$ROOT/git/gitconfig.local.symlink.example" "$fixture/git/gitconfig.local.symlink.example"
 
 	output="$(HOME="$test_home" DOTFILES_GIT_AUTHORNAME="$author_name" \
@@ -1643,7 +1693,7 @@ test_bootstrap_does_not_overwrite_racing_gitconfig () {
 
 	mkdir -p "$fixture/script" "$fixture/git" "$test_home" "$fake_bin"
 	cp "$ROOT/script/bootstrap" "$fixture/script/bootstrap"
-	cp "$ROOT/script/cache-env.sh" "$fixture/script/cache-env.sh"
+	copy_cache_env_script "$fixture"
 	cp "$ROOT/git/gitconfig.local.symlink.example" "$fixture/git/gitconfig.local.symlink.example"
 
 	real_git="$(command -v git)"
@@ -1739,7 +1789,7 @@ test_user_mode_skips_manager_and_reports_topics () {
 
 	mkdir -p "$fixture/script" "$fixture/alpha" "$fixture/beta" "$test_home" "$isolated_bin"
 	cp "$ROOT/script/install" "$fixture/script/install"
-	cp "$ROOT/script/cache-env.sh" "$fixture/script/cache-env.sh"
+	copy_cache_env_script "$fixture"
 	for command_name in bash dirname find sort uname
 	do
 		ln -s "$(command -v "$command_name")" "$isolated_bin/$command_name"
@@ -1767,7 +1817,7 @@ test_package_failure_reaches_exit_status () {
 
 	mkdir -p "$fixture/script" "$fixture/packages" "$test_home" "$fake_bin"
 	cp "$ROOT/script/install" "$fixture/script/install"
-	cp "$ROOT/script/cache-env.sh" "$fixture/script/cache-env.sh"
+	copy_cache_env_script "$fixture"
 	printf 'good\nbad\n' > "$fixture/packages/common.txt"
 	for command_name in awk bash dirname find grep sort uname
 	do
@@ -1864,6 +1914,33 @@ test_terminal_editor_defaults_to_vim () {
 	}
 	[[ "$output" == 'vi:vi:vi' ]] || \
 		fail_test "system vi fallback was not selected: $output"
+}
+
+test_dot_edit_uses_terminal_editor_priority () {
+	local fixture="$TEST_TMP_ROOT/dot-edit-repo"
+	local test_home="$TEST_TMP_ROOT/dot-edit-home"
+	local fake_bin="$TEST_TMP_ROOT/dot-edit-bin"
+	local output
+
+	mkdir -p "$fixture/bin" "$test_home" "$fake_bin"
+	cp "$ROOT/bin/dot" "$fixture/bin/dot"
+	printf '%s\n' \
+		'#!/bin/sh' \
+		'printf "vim\\n" > "$HOME/editor-selected"' \
+		'printf "%s\\0" "$@" > "$HOME/editor-args"' > "$fake_bin/vim"
+	printf '%s\n' \
+		'#!/bin/sh' \
+		'printf "code\\n" > "$HOME/editor-selected"' > "$fake_bin/code"
+	chmod +x "$fake_bin/vim" "$fake_bin/code"
+
+	output="$(env -u EDITOR HOME="$test_home" PATH="$fake_bin:/usr/bin:/bin" \
+		"$fixture/bin/dot" edit 2>&1)" || {
+		printf '%s\n' "$output" >&2
+		return 1
+	}
+	[[ "$(< "$test_home/editor-selected")" == 'vim' ]] || \
+		fail_test 'bin/dot edit did not prefer Vim'
+	assert_nul_args "$test_home/editor-args" "$fixture"
 }
 
 test_toolchains_have_no_implicit_default () {
@@ -2156,6 +2233,7 @@ run_test 'TUI warns on ambiguous toolchain directives' test_tui_warns_on_ambiguo
 run_test 'TUI overwrite emits confirmed force paths only' test_tui_overwrite_uses_confirmed_force_paths
 run_test 'TUI sudo failure falls back to user-only scope' test_tui_sudo_failure_returns_to_user_only_scope
 run_test 'init without a TTY fails clearly' test_init_without_tty_fails_clearly
+run_test 'bare dot command shows help' test_dot_without_command_shows_help
 run_test 'bootstrap rejects multiple conflict modes' test_bootstrap_rejects_multiple_conflict_modes
 run_test 'bootstrap rejects relative state home before mutation' test_bootstrap_rejects_relative_state_home_before_mutation
 run_test 'bootstrap does not follow a racing dotfiles alias' test_bootstrap_does_not_follow_racing_dotfiles_alias
@@ -2169,6 +2247,7 @@ run_test 'package failures reach the top-level status' test_package_failure_reac
 run_test 'base package profile includes interactive tools' test_base_packages_include_interactive_tools
 run_test 'Vim config loads standalone' test_vim_config_loads_standalone
 run_test 'terminal editor defaults use Vim' test_terminal_editor_defaults_to_vim
+run_test 'dot edit uses terminal editor priority' test_dot_edit_uses_terminal_editor_priority
 run_test 'toolchains have no implicit default' test_toolchains_have_no_implicit_default
 run_test 'legacy toolchain selection remains upgrade-safe' test_legacy_toolchain_selection_is_upgrade_safe
 run_test 'empty toolchain environment overrides local config' test_empty_toolchain_environment_overrides_file
