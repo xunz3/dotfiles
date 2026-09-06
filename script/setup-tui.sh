@@ -599,6 +599,7 @@ profile_description () {
 		go) printf 'Go language server, formatter, imports, and debugger' ;;
 		python) printf 'uv, Ruff, IPython, and configured Python tools' ;;
 		bun) printf 'Bun runtime and package manager' ;;
+		agent) printf 'Codex CLI and Pi Agent' ;;
 		*) printf 'Optional developer toolchain' ;;
 	esac
 }

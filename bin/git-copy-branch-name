@@ -2,6 +2,14 @@
 #
 # Copy the current branch name to the clipboard.
 
-branch=$(git rev-parse --abbrev-ref HEAD)
-echo $branch
-echo $branch | tr -d '\n' | tr -d ' ' | pbcopy
+set -eu
+
+branch=$(git branch --show-current)
+if [ -z "$branch" ]; then
+  echo "git-copy-branch-name: HEAD is detached" >&2
+  exit 1
+fi
+
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+printf '%s\n' "$branch"
+printf '%s' "$branch" | "$script_dir/clipboard-copy"

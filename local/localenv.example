@@ -1,0 +1,14 @@
+# Local-only environment loaded by every Zsh, including non-interactive shells.
+# This file is copied to ~/.localenv on first bootstrap if it does not exist.
+# Keep aliases and interactive shell hooks in ~/.localrc instead.
+
+# export PROJECTS="$HOME/projects"
+# export HTTP_PROXY="http://127.0.0.1:7897"
+# export HTTPS_PROXY="$HTTP_PROXY"
+# export ALL_PROXY="$HTTP_PROXY"
+# export http_proxy="$HTTP_PROXY"
+# export https_proxy="$HTTPS_PROXY"
+# export all_proxy="$ALL_PROXY"
+# export NO_PROXY="localhost,127.0.0.1,::1"
+# export no_proxy="$NO_PROXY"
+# export OPENAI_API_KEY=""

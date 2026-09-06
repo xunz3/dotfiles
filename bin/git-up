@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 #
 # Usage: git-up
 #        git-reup
@@ -12,25 +12,34 @@
 # Stolen from Ryan Tomayko
 # http://github.com/rtomayko/dotfiles/blob/rtomayko/bin/git-up
 
-set -e
+set -euo pipefail
 
-PULL_ARGS="$@"
+mode=$(basename -- "$0")
+pull_args=("$@")
 
 # when invoked as git-reup, run as `git pull --rebase'
-test "$(basename $0)" = "git-reup" &&
-PULL_ARGS="--rebase $PULL_ARGS"
+if [[ $mode == git-reup ]]; then
+  pull_args=(--rebase "${pull_args[@]}")
+fi
 
-git pull $PULL_ARGS
+before=$(git rev-parse --verify HEAD)
+git pull "${pull_args[@]}"
+after=$(git rev-parse --verify HEAD)
+
+if [[ $before == "$after" ]]; then
+  echo "Already up to date."
+  exit 0
+fi
 
 # show diffstat of all changes if we're pulling with --rebase. not
 # sure why git-pull only does this when merging.
-test "$(basename $0)" = "git-reup" && {
-    echo "Diff:"
-    git --no-pager diff --color --stat HEAD@{1}.. |
+if [[ $mode == git-reup ]]; then
+  echo "Diff:"
+  git --no-pager diff --color --stat "$before".."$after" |
     sed 's/^/ /'
-}
+fi
 
 # show an abbreviated commit log of stuff that was just merged.
 echo "Log:"
-git log --color --pretty=oneline --abbrev-commit HEAD@{1}.. |
-sed 's/^/  /'
+git --no-pager log --color --pretty=oneline --abbrev-commit "$before".."$after" |
+  sed 's/^/  /'

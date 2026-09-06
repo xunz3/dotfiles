@@ -7,6 +7,8 @@ bind C-a send-prefix
 # A small non-zero timeout keeps Escape responsive without misreading Alt keys
 # on slower SSH links.
 set -s escape-time 10
+set -g repeat-time 600
+set -g display-time 3000
 set -g mouse on
 set -g focus-events on
 set -g base-index 1
@@ -15,6 +17,8 @@ set -g renumber-windows on
 set -g allow-rename off
 set -g detach-on-destroy off
 set -g set-clipboard on
+setw -g monitor-activity on
+set -g visual-activity off
 
 # Prefer tmux's richer terminfo entry when it is installed, but remain usable
 # on minimal remote hosts that only ship screen-256color.
@@ -66,6 +70,8 @@ set -g status-keys vi
 bind Enter copy-mode
 bind-key -T copy-mode-vi v send -X begin-selection
 bind-key -T copy-mode-vi C-v send -X rectangle-toggle
+bind-key -T copy-mode-vi C-u send -X halfpage-up
+bind-key -T copy-mode-vi C-d send -X halfpage-down
 bind-key -T copy-mode-vi Enter send -X copy-pipe-and-cancel "$HOME/.dotfiles/bin/clipboard-copy"
 bind-key -T copy-mode-vi y send -X copy-pipe-and-cancel "$HOME/.dotfiles/bin/clipboard-copy"
 bind-key -T copy-mode-vi MouseDragEnd1Pane send -X copy-pipe-and-cancel "$HOME/.dotfiles/bin/clipboard-copy"
@@ -76,21 +82,29 @@ set -g history-limit 100000
 set -g status-interval 5
 set -g status-position bottom
 set -g status-justify left
-set -g status-style bg=colour235,fg=colour252
+set -g status-style bg=colour234,fg=colour252
 set -g pane-border-style fg=colour238
 set -g pane-active-border-style fg=colour87
-set -g message-style bg=colour24,fg=colour231
+set -g pane-border-indicators colour
+set -g display-panes-colour colour245
+set -g display-panes-active-colour colour87
+set -g message-style bg=colour24,fg=colour231,bold
 set -g message-command-style bg=colour24,fg=colour231
-set -g mode-style bg=colour24,fg=colour231
-set -g status-left-length 32
+set -g mode-style bg=colour110,fg=colour234,bold
+set -g clock-mode-colour colour110
+set -g copy-mode-match-style bg=colour237,fg=colour214
+set -g copy-mode-current-match-style bg=colour214,fg=colour234,bold
+set -g status-left-length 40
 set -g status-right-length 160
-set -g status-left "#[bold,fg=colour81] #S #[fg=colour238]|#[default]"
+set -g status-left "#[bold,bg=colour110,fg=colour234] #S #[bg=colour234,fg=colour238]│"
 set -g window-status-separator ""
 set -g window-status-format "#[fg=colour245] #I:#W#F "
-set -g window-status-current-format "#[bold,bg=colour237,fg=colour81] #I:#W#F "
+set -g window-status-current-format "#[bold,bg=colour237,fg=colour117] #I:#W#F "
 set -g window-status-activity-style "bold,fg=colour214"
 set -g window-status-bell-style "bold,bg=colour196,fg=colour231"
-set -g status-right "#{?client_prefix,#[bold,bg=colour196,fg=colour231] PREFIX #[default],}#{?pane_in_mode,#[bold,fg=colour214] COPY #[default],}#{?window_zoomed_flag,#[bold,fg=colour81] ZOOM #[default],}#{?pane_synchronized,#[bold,fg=colour213] SYNC #[default],}#[fg=colour245] #{b:pane_current_path} | #h | %Y-%m-%d %H:%M "
+# Commas delimit tmux condition branches, so conditional styles use one
+# attribute per block. A comma inside #[bold,bg=...] renders as literal text.
+set -g status-right "#[bg=colour234]#[fg=colour252]#{?client_prefix,#[bold]#[bg=colour196]#[fg=colour231] PREFIX #[nobold]#[bg=colour234]#[fg=colour252],}#{?pane_in_mode,#[bold]#[fg=colour214] COPY #[nobold]#[fg=colour252],}#{?window_zoomed_flag,#[bold]#[fg=colour117] ZOOM #[nobold]#[fg=colour252],}#{?pane_synchronized,#[bold]#[fg=colour213] SYNC #[nobold]#[fg=colour252],}#[fg=colour245] #{b:pane_current_path} #[fg=colour238]│#[fg=colour245] #h #[fg=colour238]│#[fg=colour252] %Y-%m-%d %H:%M "
 
 ##### Reload #####
 

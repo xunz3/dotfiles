@@ -7,8 +7,8 @@ This repo manages:
 - shell: `zsh`, `oh-my-zsh`, aliases, completions, paths
 - terminal: `tmux`
 - terminal editor: `vim`
-- CLI config: `git`, `htop`, `neofetch`
-- optional toolchain profiles: `node`, `java`, `rust`, `go`, `python`, `bun`
+- CLI config: `git`, `htop`, `bat`, `tealdeer`, `fastfetch`
+- optional toolchain profiles: `node`, `java`, `rust`, `go`, `python`, `bun`, `agent`
 
 ## Fresh Machine Setup
 
@@ -51,6 +51,7 @@ DOTFILES_GIT_AUTHORNAME="Your Name" DOTFILES_GIT_AUTHOREMAIL="you@example.com" b
 `script/bootstrap` also creates these local-only files when they do not exist:
 
 - `~/.gitconfig.local` from `git/gitconfig.local.symlink.example` if identity is provided interactively or through environment variables
+- `~/.localenv` from `local/localenv.example` for variables needed by every Zsh
 - `~/.localrc` from `local/localrc.example` if it does not exist
 - `~/.toolchainsrc` from `local/toolchainsrc.example` if it does not exist
 
@@ -75,6 +76,9 @@ bin/dot install --cache-workspace /data4/zhangxun # configure caches, then insta
 bin/dot install --toolchains node java # install selected toolchain profiles
 bin/dot packages          # print package list for this machine
 bin/dot packages --toolchains node # print package list for selected toolchains
+bin/dot doctor            # inspect managed links and preferred tools (read-only)
+bin/dot task              # list dotfiles maintenance recipes from any directory
+bin/dot task test         # run a dotfiles recipe from any directory
 bin/dot ssh               # initialize ~/.ssh permissions and baseline config
 bin/dot toolchains list   # print available toolchain profiles
 bin/dot toolchains        # install default profiles from ~/.toolchainsrc
@@ -104,7 +108,22 @@ Zsh keeps startup work small and exposes fuzzy navigation only in a real termina
 - a command prefixed with a space: omit it from persistent history
 - `l` / `ll` / `la`: eza long, normal, and all-file views when eza is installed; `ls` remains the platform command
 - `lt`: a two-level eza tree without requiring icon fonts
+- `z` / `zi`: jump by directory frecency, or choose interactively with zoxide; the OMZ `z` plugin remains the fallback when zoxide is unavailable
+- `search` / `ff` / `fdir`: search text, files, or directories with ripgrep and fd
+- `disk` / `replace` / `bt` / `how` / `fetch`: duf, sd, btop, tealdeer, and Fastfetch with memorable names
 - entering a directory with `.envrc`: direnv blocks it until the file has been reviewed and approved with `direnv allow`
+
+Traditional commands keep their normal option grammar by default. To explicitly
+trade that compatibility for shorter modern commands, add this to `~/.localrc`:
+
+```sh
+export DOTFILES_MODERN_ALIASES=1
+```
+
+That enables interactive-only `grep -> rg`, `find -> fd`, `df -> duf`, and
+`top -> btop` aliases. Use `command grep` or `\grep` to bypass one alias. `sed`
+and `make` are not replaced because `sd` and `just` use meaningfully different
+grammars; invoke those tools by their own names.
 
 Tmux uses `Ctrl-A` as its prefix. The main workflow is:
 
@@ -119,9 +138,13 @@ Tmux uses `Ctrl-A` as its prefix. The main workflow is:
 
 Clipboard copy is shared by tmux and `pubkey`, with Wayland, X11, macOS, and WSL providers detected at runtime. See [the interactive configuration review](docs/interactive-config-review.md) for measurements, alternatives considered, and the rationale behind these defaults.
 
-Git uses Delta for human-facing diffs and interactive staging when it is installed. Within a long diff, `n` and `N` move between files and commits. A repository-owned pager wrapper falls back to `less` or plain output if the package is unavailable, so user-only and partially completed installs still have working Git output.
+Git uses Delta for human-facing diffs and interactive staging when it is installed. Within a long diff, `n` and `N` move between files and commits. A repository-owned pager wrapper falls back to `less` or plain output if the package is unavailable, so user-only and partially completed installs still have working Git output. `gd` now stays composable as `git diff`, `gds` shows staged changes, and `gsw` / `grs` expose the modern `switch` / `restore` split while `gco` remains available for old muscle memory. The older `git promote`, `git track`, `git unpushed`, and editor helpers now preserve argument boundaries and use the configured upstream; `git nuke` refuses the current/default branch and removes the remote before the local recovery copy.
 
-Vim is intentionally a small, plugin-free terminal editor. The tracked config provides dependable navigation, search, indentation, clipboard integration when supported, a few save/quit mappings, and sensible file-type defaults. IDE features such as language servers, completion, file explorers, and formatting stay in VS Code, so installing these dotfiles does not bootstrap a second editor ecosystem.
+Vim is intentionally a small, plugin-free terminal editor. The tracked config now adds an embedded true-color/256-color palette, hybrid line numbers, persistent undo under XDG state, a compact status line, modern split defaults, centered search navigation, netrw access, and sensible file-type indentation. IDE features such as language servers, completion, file explorers, and formatting stay in VS Code, so installing these dotfiles does not bootstrap a second editor ecosystem.
+
+The repository itself includes a `justfile`: inside the checkout, `just test`,
+`just lint`, and `just doctor` are short maintenance workflows. From any other
+directory, use `dot task` to list them or `dot task <recipe>` to run one.
 
 ## Optional Cache Workspace
 
@@ -155,12 +178,14 @@ By default, package installation uses the system package manager through `sudo` 
 
 Package and topic failures are accumulated so the remaining independent installers can run. The final summary lists failures, and `dot install` / `dot setup` returns a non-zero status if any required package, topic, or selected toolchain profile failed.
 
-The base profile includes a practical server/workstation baseline: Git with Delta, zsh, Vim, tmux, htop/btop, GitHub CLI, ripgrep/fzf, direnv, eza, hyperfine, JSON/YAML tools, archive tools, rsync, tree, file, lsof, ncdu, OpenSSH client, DNS/IP/ping/netcat utilities, Python 3, and build essentials for the current distro.
+The base profile includes a practical server/workstation baseline: Git with Delta, zsh, Vim, tmux, htop/btop, GitHub CLI, ripgrep/fzf, direnv, eza, zoxide, duf, tealdeer, just, hyperfine, JSON/YAML tools, archive tools, rsync, tree, file, lsof, ncdu, OpenSSH client, DNS/IP/ping/netcat utilities, Python 3, and build essentials for the current distro. Ubuntu/Debian and Arch profiles also install `sd`; other distributions retain `sed` until a reliable native package is available.
 
 Base install hooks:
 
 - `zsh/install.sh`: `oh-my-zsh`, `zsh-autosuggestions`, `zsh-syntax-highlighting`
 - `ssh/install.sh`: initializes `~/.ssh` permissions and a baseline client config
+- `fastfetch/install.sh`: installs a pinned, checksummed Fastfetch release with its man page and Zsh completion
+- `tealdeer/install.sh`: installs a pinned, checksummed Tealdeer release and Zsh completion, avoiding stale distro builds
 - `yq/install.sh`: installs the pinned Mike Farah yq release and its Zsh completion under `~/.local`
 - `toolchains/install.sh`: dispatches selected toolchain profiles
 
@@ -184,16 +209,34 @@ Available profiles:
 - `go`: installs common Go tools with `go install`
 - `python`: installs `uv` and selected Python CLI tools
 - `bun`: installs Bun
+- `agent`: installs Codex CLI and Pi Agent with their official curl installers; prepares a user-local Node.js LTS through nvm if Pi's Node.js 22.19.0+ and npm prerequisites are missing
 
 Each profile can have package prerequisites under `toolchains/packages/common/<profile>.txt` and `toolchains/packages/<distro>/<profile>.txt`. The installer reads those files after the base package list and before running profile scripts.
 
 The YAML processor follows the same controlled-release model. `yq/install.sh` pins Mike Farah yq `v4.53.3`, validates the official binary with an architecture-specific SHA-256, and links it through `~/.local/bin/yq`. This intentionally avoids the incompatible Python/jq-wrapper package named `yq` on Debian and Ubuntu. To request another stable release, set both `DOTFILES_YQ_VERSION` and `DOTFILES_YQ_SHA256`.
+
+Fastfetch replaces the archived Neofetch package. `fastfetch/install.sh` pins
+Fastfetch `2.67.1`, validates the official amd64/arm64 archive, and publishes a
+versioned installation under `~/.local/opt`. The old `neofetch` command name is
+kept as an interactive alias to Fastfetch. As with yq, a custom release requires
+both `DOTFILES_FASTFETCH_VERSION` and `DOTFILES_FASTFETCH_SHA256`.
+
+Tealdeer is also installed from a controlled upstream release because older
+distribution builds use a retired tldr-pages archive URL. The installer pins
+Tealdeer `1.8.1`, validates the binary and completion, and places `tldr` under
+`~/.local/bin` ahead of any older system package.
 
 For a version not already pinned in the script, provide both the version and the official SHA-256 for the current architecture:
 
 ```sh
 DOTFILES_YQ_VERSION=vX.Y.Z \
 DOTFILES_YQ_SHA256=<sha256> \
+bin/dot install --user
+```
+
+```sh
+DOTFILES_FASTFETCH_VERSION=X.Y.Z \
+DOTFILES_FASTFETCH_SHA256=<sha256> \
 bin/dot install --user
 ```
 
@@ -222,8 +265,11 @@ Top-level dotfiles:
 
 XDG config:
 
+- `~/.config/bat`
+- `~/.config/fastfetch`
 - `~/.config/htop`
-- `~/.config/neofetch`
+- `~/.config/tealdeer`
+- `~/.config/neofetch` (legacy config retained for already-installed Neofetch)
 
 ## Repository Layout
 
@@ -247,21 +293,24 @@ XDG config:
 Keep anything machine-specific outside the tracked config:
 
 - Git identity: `~/.gitconfig.local`
-- secrets and tokens: `~/.localrc`
+- environment variables, proxies, secrets, and tokens: `~/.localenv`
 - toolchain profile defaults: `~/.toolchainsrc`
-- proxy settings: `~/.localrc`
-- custom paths such as `PROJECTS`: `~/.localrc`
+- custom paths such as `PROJECTS`: `~/.localenv`
 - generated cache paths: `${XDG_CONFIG_HOME:-~/.config}/dotfiles/cache-env.d/`
 - machine-specific shell hooks, such as local proxy controllers: `~/.localrc`
+- opt-in command-name replacement: `DOTFILES_MODERN_ALIASES=1` in `~/.localrc`
 
 Examples:
 
 ```sh
+# ~/.localenv
 export PROJECTS="$HOME/projects"
 export HTTP_PROXY="http://proxy.example:8080"
 export HTTPS_PROXY="$HTTP_PROXY"
 export http_proxy="$HTTP_PROXY"
 export https_proxy="$HTTPS_PROXY"
+
+# ~/.localrc
 [[ -r "$HOME/path/to/local/tool.sh" ]] && source "$HOME/path/to/local/tool.sh"
 ```
 
@@ -286,6 +335,7 @@ Examples:
 
 - This repo is intended for Linux hosts.
 - Zsh uses `oh-my-zsh` with the `lambda` theme by default.
+- zoxide owns `z`/`zi` when available; the Oh My Zsh `z` plugin is the fallback.
 - `EDITOR`, `VISUAL`, and `GIT_EDITOR` prefer Vim for terminal workflows and fall back to the system `vi`.
 - `PROJECTS` defaults to `$HOME/projects`, then falls back to `$HOME/Code`.
 - Cargo is loaded from `~/.cargo/env` through `~/.zshenv` when available.

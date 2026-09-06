@@ -24,6 +24,8 @@ Commands:
 	bootstrap   Symlink dotfiles into $HOME
 	install     Install packages and run topic installers
 	packages    Print the resolved package list for this machine
+	doctor      Check managed links and preferred CLI tools (read-only)
+	task        List or run repository maintenance recipes from any directory
 	ssh         Initialize ~/.ssh permissions and baseline config
 	toolchains  Install or inspect the toolchain profile
 	update      Pull latest changes, reconcile links, then run install
@@ -42,6 +44,7 @@ Common options:
 	                     Configure caches without running bootstrap
 	install --toolchains [profiles] Include selected toolchain profiles
 	packages --toolchains [profiles] Print selected toolchain package lists
+	task [recipe]          List recipes, or run one from the dotfiles directory
 	toolchains list       Print available toolchain profiles
 	toolchains node java  Install selected toolchain profiles
 EOF
@@ -177,6 +180,26 @@ run_ssh() {
 	"$dotfiles_directory/ssh/install.sh" "$@"
 }
 
+run_doctor() {
+	"$dotfiles_directory/script/doctor" "$@"
+}
+
+run_task() {
+	if ! command -v just >/dev/null 2>&1
+	then
+		echo "just is required for dot task; run 'dot install' first" >&2
+		exit 1
+	fi
+
+	if [[ $# -eq 0 ]]
+	then
+		set -- --list
+	fi
+
+	exec just --justfile "$dotfiles_directory/justfile" \
+		--working-directory "$dotfiles_directory" "$@"
+}
+
 pull_latest() {
 	echo "› git pull"
 	git -C "$dotfiles_directory" pull --ff-only
@@ -202,6 +225,12 @@ case "$command_name" in
 		;;
 	packages)
 		run_install --print "$@"
+		;;
+	doctor)
+		run_doctor "$@"
+		;;
+	task|tasks)
+		run_task "$@"
 		;;
 	ssh)
 		run_ssh "$@"

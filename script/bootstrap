@@ -318,6 +318,7 @@ setup_local_template () {
 }
 
 setup_local_files () {
+  setup_local_template "$DOTFILES_ROOT/local/localenv.example" "$HOME/.localenv"
   setup_local_template "$DOTFILES_ROOT/local/localrc.example" "$HOME/.localrc"
   setup_local_template "$DOTFILES_ROOT/local/toolchainsrc.example" "$HOME/.toolchainsrc"
 }

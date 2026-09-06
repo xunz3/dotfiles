@@ -3,10 +3,12 @@
         path = ~/.gitconfig.local
 [alias]
         co = checkout
+        sw = switch
+        rs = restore
         br = branch
         ci = commit
         st = status
-        unstage = reset HEAD --
+        unstage = restore --staged --
         last = log -1 HEAD
         promote = !$HOME/.dotfiles/bin/git-promote
         wtf     = !$HOME/.dotfiles/bin/git-wtf

@@ -12,6 +12,10 @@ set hidden
 set confirm
 set autoread
 set mouse=a
+set splitbelow
+set splitright
+set timeoutlen=500
+set updatetime=300
 
 set tabstop=4
 set shiftwidth=4
@@ -22,10 +26,12 @@ set smartindent
 
 " Search and navigation
 set number
+set relativenumber
 set ruler
 set showcmd
 set showmatch
-set scrolloff=3
+set cursorline
+set scrolloff=5
 set sidescrolloff=5
 set nowrap
 set incsearch
@@ -36,9 +42,79 @@ set smartcase
 " Completion and display
 set wildmenu
 set wildmode=longest:full,full
+set wildignorecase
 set laststatus=2
 set background=dark
-colorscheme desert
+set shortmess+=I
+set listchars=tab:»·,trail:·,extends:›,precedes:‹,nbsp:␣
+set fillchars=vert:│,fold:·,diff:╱
+
+if exists('+completeopt')
+  set completeopt=menuone,noselect
+endif
+if exists('+signcolumn')
+  set signcolumn=yes
+endif
+if exists('+inccommand')
+  set inccommand=nosplit
+endif
+if exists('+termguicolors') && (&term =~# '256color' || exists('$COLORTERM'))
+  set termguicolors
+endif
+
+" Persistent undo belongs in state, not beside edited files. Ignore a relative
+" XDG_STATE_HOME rather than allowing it to redirect writes into a project.
+if exists('+undofile')
+  let s:state_home = empty($XDG_STATE_HOME) ? expand('~/.local/state') : $XDG_STATE_HOME
+  if s:state_home =~# '^/' && s:state_home !=# '/'
+    let s:undo_dir = s:state_home . '/vim/undo'
+    if isdirectory(s:undo_dir) || mkdir(s:undo_dir, 'p', 0700)
+      let &undodir = s:undo_dir
+      set undofile
+    endif
+  endif
+  unlet s:state_home
+  if exists('s:undo_dir') | unlet s:undo_dir | endif
+endif
+
+" A small built-in palette keeps Vim attractive on fresh machines without
+" creating a plugin manager or a second editor ecosystem.
+highlight clear
+if exists('syntax_on')
+  syntax reset
+endif
+let g:colors_name = 'dotfiles'
+highlight Normal       ctermfg=252 ctermbg=235 guifg=#cdd6f4 guibg=#1e1e2e
+highlight Comment      cterm=italic ctermfg=244 gui=italic guifg=#6c7086
+highlight Constant     ctermfg=180 guifg=#f9e2af
+highlight Identifier   ctermfg=117 guifg=#89dceb
+highlight Statement    cterm=bold ctermfg=110 gui=bold guifg=#89b4fa
+highlight PreProc      ctermfg=176 guifg=#cba6f7
+highlight Type         ctermfg=150 guifg=#a6e3a1
+highlight Special      ctermfg=173 guifg=#fab387
+highlight Underlined   cterm=underline ctermfg=117 gui=underline guifg=#89dceb
+highlight Todo         cterm=bold ctermfg=235 ctermbg=180 gui=bold guifg=#1e1e2e guibg=#f9e2af
+highlight CursorLine   ctermbg=236 guibg=#24243a
+highlight CursorLineNr cterm=bold ctermfg=180 gui=bold guifg=#f9e2af
+highlight LineNr       ctermfg=239 guifg=#585b70
+highlight Visual       ctermbg=60 guibg=#45475a
+highlight Search       ctermfg=235 ctermbg=180 guifg=#1e1e2e guibg=#f9e2af
+highlight IncSearch    ctermfg=235 ctermbg=173 guifg=#1e1e2e guibg=#fab387
+highlight MatchParen   cterm=bold ctermfg=235 ctermbg=150 gui=bold guifg=#1e1e2e guibg=#a6e3a1
+highlight Pmenu        ctermfg=252 ctermbg=237 guifg=#cdd6f4 guibg=#313244
+highlight PmenuSel     cterm=bold ctermfg=235 ctermbg=110 gui=bold guifg=#1e1e2e guibg=#89b4fa
+highlight StatusLine   cterm=bold ctermfg=235 ctermbg=110 gui=bold guifg=#1e1e2e guibg=#89b4fa
+highlight StatusLineNC ctermfg=245 ctermbg=237 guifg=#7f849c guibg=#313244
+highlight VertSplit    ctermfg=238 ctermbg=235 guifg=#45475a guibg=#1e1e2e
+highlight NonText      ctermfg=239 guifg=#585b70
+highlight SpecialKey   ctermfg=239 guifg=#585b70
+highlight Directory    cterm=bold ctermfg=117 gui=bold guifg=#89dceb
+highlight ErrorMsg     cterm=bold ctermfg=224 ctermbg=167 gui=bold guifg=#f5e0dc guibg=#d20f39
+
+set statusline=%<%f\ %h%m%r
+set statusline+=%=
+set statusline+=%y\ %{&fileencoding==#''?&encoding:&fileencoding}
+set statusline+=\ %l:%c\ %p%%
 
 if has('clipboard')
   set clipboard^=unnamedplus
@@ -47,11 +123,23 @@ endif
 let mapleader = ' '
 nnoremap <silent> <leader>w :write<CR>
 nnoremap <silent> <leader>q :quit<CR>
+nnoremap <silent> <leader>e :Explore<CR>
+nnoremap <silent> <leader>l :setlocal list!<CR>
 nnoremap <silent> <Esc><Esc> :nohlsearch<CR>
+nnoremap <C-h> <C-w>h
+nnoremap <C-j> <C-w>j
+nnoremap <C-k> <C-w>k
+nnoremap <C-l> <C-w>l
+nnoremap n nzzzv
+nnoremap N Nzzzv
+nnoremap Y y$
 
 augroup dotfiles_vim
   autocmd!
   autocmd BufReadPost * if line("'\"") > 1 && line("'\"") <= line('$') | execute "normal! g`\"" | endif
+  autocmd InsertEnter * setlocal norelativenumber
+  autocmd InsertLeave * setlocal relativenumber
   autocmd FileType gitcommit,markdown,text setlocal wrap linebreak
+  autocmd FileType css,html,javascript,json,sh,typescript,yaml,zsh setlocal tabstop=2 shiftwidth=2 softtabstop=2
   autocmd FileType make setlocal noexpandtab
 augroup END

@@ -3,5 +3,12 @@
 # Sets up your branch to track a remote branch. Assumes you mean
 # `origin/$branch-name`.
 
-branch=$(git rev-parse --abbrev-ref HEAD)
-git branch $branch --set-upstream-to origin/$branch
+set -eu
+
+branch=$(git branch --show-current)
+if [ -z "$branch" ]; then
+  echo "git-track: HEAD is detached" >&2
+  exit 1
+fi
+
+exec git branch --set-upstream-to="origin/$branch" -- "$branch"

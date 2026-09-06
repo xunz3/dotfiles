@@ -20,9 +20,8 @@ then
   fi
 fi
 
-# Stash your environment variables in ~/.localrc. This means they'll stay out
-# of your main dotfiles repository (which may be public, like this one), but
-# you'll have access to them in your scripts.
+# Interactive aliases and shell hooks live in ~/.localrc. Variables needed by
+# scripts and non-interactive shells belong in ~/.localenv (loaded by .zshenv).
 if [[ -r "$HOME/.localrc" ]]
 then
   source "$HOME/.localrc"
@@ -66,7 +65,13 @@ then
   then
     plugins+=(fzf)
   fi
-  plugins+=(z gh nvm zsh-autosuggestions)
+  # zoxide owns `z` when installed. Keep Oh My Zsh's z plugin as a fallback on
+  # minimal hosts where only the linked configuration has been bootstrapped.
+  if ! (( $+commands[zoxide] ))
+  then
+    plugins+=(z)
+  fi
+  plugins+=(gh nvm zsh-autosuggestions)
 
   source "$ZSH/oh-my-zsh.sh"
 else
@@ -108,6 +113,13 @@ bindkey "^[[B" down-line-or-beginning-search # Down
 if (( $+commands[direnv] ))
 then
   eval "$(direnv hook zsh)"
+fi
+
+# zoxide must initialize after compinit for its interactive Zsh completions.
+# It intentionally replaces the older `z` implementation, not the cd builtin.
+if (( $+commands[zoxide] ))
+then
+  eval "$(zoxide init zsh)"
 fi
 
 # zsh-syntax-highlighting must be loaded after compinit, plugins, widgets, and

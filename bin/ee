@@ -2,4 +2,14 @@
 #
 # vscode requires `--wait` if you're editing interactively in a prompt.
 #
-EDITOR="$EDITOR --wait" $@
+
+set -eu
+
+[ "$#" -gt 0 ] || set -- .
+
+if command -v code >/dev/null 2>&1; then
+  exec code --wait "$@"
+fi
+
+# Keep the shortcut useful on hosts where VS Code is unavailable.
+exec "${VISUAL:-${EDITOR:-vim}}" "$@"

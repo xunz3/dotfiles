@@ -1,0 +1,236 @@
+#!/usr/bin/env bash
+#
+# Read-only health report for managed links and the interactive CLI toolbox.
+
+set -uo pipefail
+
+cd "$(dirname "$0")/.."
+DOTFILES_ROOT="$(pwd -P)"
+verbose=false
+
+usage () {
+	cat <<'EOF'
+Usage: script/doctor [--verbose]
+
+Check managed links and report which preferred CLI tools are available.
+This command never installs packages or changes files.
+EOF
+}
+
+while [[ $# -gt 0 ]]
+do
+	case "$1" in
+		-v|--verbose)
+			verbose=true
+			;;
+		-h|--help)
+			usage
+			exit 0
+			;;
+		*)
+			printf 'Unknown doctor option: %s\n' "$1" >&2
+			usage >&2
+			exit 2
+			;;
+	esac
+	shift
+done
+
+if [[ -t 1 && -z "${NO_COLOR:-}" ]]
+then
+	green=$'\033[32m'
+	yellow=$'\033[33m'
+	red=$'\033[31m'
+	dim=$'\033[2m'
+	reset=$'\033[0m'
+else
+	green=''
+	yellow=''
+	red=''
+	dim=''
+	reset=''
+fi
+
+ok () {
+	printf '  %sOK%s  %s\n' "$green" "$reset" "$1"
+}
+
+warn () {
+	printf '  %s--%s  %s\n' "$yellow" "$reset" "$1"
+}
+
+bad () {
+	printf '  %s!!%s  %s\n' "$red" "$reset" "$1"
+}
+
+short_home_path () {
+	local path=$1
+	if [[ "$path" == "$HOME"/* ]]
+	then
+		printf '~/%s' "${path#"$HOME"/}"
+	else
+		printf '%s' "$path"
+	fi
+}
+
+managed_total=0
+managed_ok=0
+managed_missing=0
+managed_drift=0
+
+check_managed_link () {
+	local source=$1 target=$2 current=''
+	managed_total=$((managed_total + 1))
+
+	if [[ -L "$target" ]]
+	then
+		current="$(readlink "$target")"
+		if [[ "$current" == "$source" ]]
+		then
+			managed_ok=$((managed_ok + 1))
+			[[ "$verbose" == "true" ]] && ok "$(short_home_path "$target")"
+			return
+		fi
+
+		managed_drift=$((managed_drift + 1))
+		bad "$(short_home_path "$target") -> $current (expected $source)"
+		return
+	fi
+
+	if [[ -e "$target" ]]
+	then
+		managed_drift=$((managed_drift + 1))
+		bad "$(short_home_path "$target") is not a managed symlink"
+	else
+		managed_missing=$((managed_missing + 1))
+		warn "$(short_home_path "$target") is not linked"
+	fi
+}
+
+printf 'Dotfiles doctor\n\nManaged links\n'
+
+while IFS= read -r -d '' source
+do
+	target="$HOME/.$(basename "${source%.*}")"
+	check_managed_link "$source" "$target"
+done < <(find -H "$DOTFILES_ROOT" -maxdepth 2 -name '*.symlink' \
+	-not -name 'gitconfig.local.symlink' -not -path '*.git*' -print0 | sort -z)
+
+while IFS= read -r -d '' source
+do
+	rel_path="${source#"$DOTFILES_ROOT"/}"
+	rel_path="${rel_path#*/config/}"
+	target="$HOME/.config/$rel_path"
+	check_managed_link "$source" "$target"
+done < <(find -H "$DOTFILES_ROOT" -mindepth 3 -maxdepth 3 \
+	-path '*/config/*' -not -path '*.git*' -print0 | sort -z)
+
+if [[ "$managed_drift" -eq 0 && "$managed_missing" -eq 0 && "$verbose" != "true" ]]
+then
+	ok "$managed_ok/$managed_total links point to this checkout"
+else
+	printf '  %s%d OK, %d missing, %d drifted%s\n' \
+		"$dim" "$managed_ok" "$managed_missing" "$managed_drift" "$reset"
+fi
+
+printf '\nPreferred CLI toolbox\n'
+
+tool_total=0
+tool_available=0
+
+check_tool () {
+	local label=$1 candidates=$2 purpose=$3 candidate resolved=''
+	tool_total=$((tool_total + 1))
+
+	for candidate in $candidates
+	do
+		if command -v "$candidate" >/dev/null 2>&1
+		then
+			resolved="$candidate"
+			break
+		fi
+	done
+
+	if [[ -n "$resolved" ]]
+	then
+		tool_available=$((tool_available + 1))
+		printf '  %sOK%s  %-12s %s %s(%s)%s\n' \
+			"$green" "$reset" "$label" "$purpose" "$dim" "$resolved" "$reset"
+	else
+		printf '  %s--%s  %-12s %s %s(not installed)%s\n' \
+			"$yellow" "$reset" "$label" "$purpose" "$dim" "$reset"
+	fi
+}
+
+tealdeer_cache_update_is_supported () {
+	local version=$1 oldest
+
+	case "$version" in
+		1.5.1|1.6.2|1.7.3) return 0 ;;
+	esac
+
+	oldest="$(printf '%s\n' 1.8.0 "$version" | sort -V | head -n 1)"
+	[[ "$oldest" == '1.8.0' ]]
+}
+
+check_tealdeer () {
+	local resolved version_output version
+	tool_total=$((tool_total + 1))
+
+	if ! resolved="$(command -v tldr 2>/dev/null)"
+	then
+		printf '  %s--%s  %-12s %s %s(not installed)%s\n' \
+			"$yellow" "$reset" 'tealdeer' 'example-based command help' "$dim" "$reset"
+		return
+	fi
+
+	version_output="$(tldr --version 2>/dev/null || true)"
+	version="${version_output#tealdeer }"
+	if [[ "$version" != "$version_output" ]] && tealdeer_cache_update_is_supported "$version"
+	then
+		tool_available=$((tool_available + 1))
+		printf '  %sOK%s  %-12s %s %s(%s, %s)%s\n' \
+			"$green" "$reset" 'tealdeer' 'example-based command help' \
+			"$dim" "$resolved" "$version" "$reset"
+	else
+		printf '  %s--%s  %-12s %s %s(%s uses the retired cache URL; run dot install --user)%s\n' \
+			"$yellow" "$reset" 'tealdeer' 'example-based command help' \
+			"$dim" "${version:-unknown version}" "$reset"
+	fi
+}
+
+check_tool 'eza'       'eza'          'readable directory views'
+check_tool 'bat'       'bat batcat'   'syntax-aware file viewing'
+check_tool 'ripgrep'   'rg'           'fast text search'
+check_tool 'fd'        'fd fdfind'    'friendly file search'
+check_tool 'fzf'       'fzf'          'interactive fuzzy selection'
+check_tool 'zoxide'    'zoxide'       'frecency-based directory jumps'
+check_tool 'Delta'     'delta'        'readable Git diffs'
+check_tool 'duf'       'duf'          'readable filesystem usage'
+check_tool 'sd'        'sd'           'friendly find and replace'
+check_tool 'btop'      'btop'         'interactive process monitoring'
+check_tealdeer
+check_tool 'Fastfetch' 'fastfetch'    'maintained system summary'
+check_tool 'direnv'    'direnv'       'per-project environments'
+check_tool 'hyperfine' 'hyperfine'    'command benchmarking'
+check_tool 'just'      'just'         'project task recipes'
+check_tool 'jq'        'jq'           'JSON processing'
+check_tool 'yq'        'yq'           'YAML processing'
+check_tool 'GitHub CLI' 'gh'          'GitHub workflows'
+
+printf '  %s%d/%d preferred tools available%s\n' \
+	"$dim" "$tool_available" "$tool_total" "$reset"
+
+printf '\nAliases\n'
+printf '  safe: l/ll/la/lt, cat, search, ff/fdir, disk, replace, bt, how, fetch\n'
+if [[ "${DOTFILES_MODERN_ALIASES:-0}" == "1" ]]
+then
+	ok 'compatibility aliases enabled: grep/find/df/top'
+else
+	warn 'compatibility aliases disabled; set DOTFILES_MODERN_ALIASES=1 in ~/.localrc to enable'
+fi
+
+if [[ "$managed_drift" -gt 0 ]]
+then
+	exit 1
+fi

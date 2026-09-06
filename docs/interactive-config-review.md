@@ -1,6 +1,6 @@
 # Interactive configuration review
 
-Reviewed on 2026-08-13 against the checked-out configuration and the current Ubuntu 24.04 WSL host.
+Reviewed on 2026-08-13 against the checked-out configuration and the current Ubuntu 24.04 WSL host; modernization decisions were revisited on 2026-09-03.
 
 ## Baseline
 
@@ -21,7 +21,7 @@ The editor configuration was later narrowed to a plugin-free Vim setup for termi
 | Zsh framework | Keep targeted Oh My Zsh plugins; switch to raw Zsh, Zim, or another manager | A framework switch can reduce parsing and offer more aggressive caching | Rewrites plugin loading, aliases, themes, update behavior, and fallback paths | Keep Oh My Zsh; the measured bottleneck was NVM, not the framework |
 | Node runtime | Eagerly source NVM; hand-roll lazy functions; use Oh My Zsh's NVM lazy mode | Lazy loading removes runtime discovery from every shell while keeping normal commands | First Node command pays the initialization cost; hand-written shims drift as commands change | Use the maintained Oh My Zsh lazy mode, with an eager fallback only when Oh My Zsh is disabled |
 | Fuzzy shell UI | Native completion only; Oh My Zsh fzf integration; install fzf-tab | fzf adds fuzzy history, path insertion, directory changes, and `**` completion | fzf-tab replaces the normal Tab UI, adds another checkout, and has strict widget load-order requirements | Enable the built-in fzf integration on real TTYs; retain native grouped Tab completion |
-| Directory jumping | Keep Oh My Zsh `z`; migrate to zoxide | zoxide has a maintained binary, predictable frecency ranking, and interactive `zi` | It adds a binary and a second database; upstream warns Debian/Ubuntu packages may lag | Keep `z` for now; migrate only when zoxide is intentionally added to every target distro |
+| Directory jumping | Keep Oh My Zsh `z`; migrate to zoxide | zoxide has a maintained binary, predictable frecency ranking, and interactive `zi` | It adds a binary and a second database; distro packages can lag upstream | Install zoxide in the base profile, let it own `z`/`zi`, and retain the OMZ plugin only as a no-binary fallback |
 | Syntax highlighting | Load as an Oh My Zsh plugin; source after all widgets | End-of-file loading lets the highlighter observe the final ZLE hook and keymap state | One explicit source line is less framework-managed | Source it last, as upstream requires |
 | History | Keep `APPEND_HISTORY`, `INC_APPEND_HISTORY`, and `SHARE_HISTORY`; choose one sharing policy | A single policy is predictable; duplicate filtering and `fcntl` locking improve long-running multi-shell use | Shared history intentionally exposes commands from other open shells | Keep `SHARE_HISTORY`, remove redundant incremental append, preserve 40k unique entries, and omit space-prefixed commands |
 | tmux terminal model | Force `screen-256color`; force `tmux-256color`; detect terminfo | `tmux-256color` carries more key and display capabilities | Minimal remote systems may not install its terminfo entry | Prefer `tmux-256color` when `infocmp` finds it, otherwise fall back to `screen-256color`; declare RGB with `terminal-features` |
@@ -34,7 +34,7 @@ The editor configuration was later narrowed to a plugin-free Vim setup for termi
 | Project environments | Keep variables in `.localrc`; add direnv | Project variables load and unload automatically, and `.envrc` requires explicit authorization | Reviewed `.envrc` files execute shell code and the hook runs at each prompt | Install direnv in the base profile and initialize its official Zsh hook late |
 | File listing | Keep GNU/BSD `ls`; replace it globally; use eza for explicit views | eza adds Git status, headers, grouping, and trees | Its flags are not fully `ls` compatible; icons depend on fonts | Preserve `ls`; use eza only for `l`, `ll`, `la`, and `lt`, without icons |
 | YAML CLI | Install the distro package named `yq`; pin Mike Farah yq | A pinned v4 binary gives consistent syntax on every supported distro | The repository owns another versioned user binary | Remove ambiguous distro `yq`; install the official v4 release with SHA-256 validation |
-| System fetch UI | Keep Neofetch; migrate to Fastfetch | Fastfetch is maintained, faster, and more structured | Neofetch's repo is archived, but Fastfetch is not in Ubuntu's normal repository until 25.04 according to upstream | Defer migration on Ubuntu 24.04 rather than add a PPA or unmanaged release binary |
+| System fetch UI | Keep Neofetch; migrate to Fastfetch | Fastfetch is maintained, faster, and more structured | Fastfetch is absent from the Ubuntu 24.04 repository, so the project must own its update lifecycle | Use a pinned official archive with architecture-specific SHA-256 validation and keep `neofetch` only as a compatibility alias |
 
 ## Implemented behavior
 
@@ -48,6 +48,8 @@ The editor configuration was later narrowed to a plugin-free Vim setup for termi
 - The redundant manual Git completion source was removed; `compinit` already autoloads the packaged `_git` entry from `fpath`.
 - Docker aliases no longer interpolate the interactive shell's `$*`, and Compose v2 is the default when the legacy executable is absent.
 - `reload!` replaces the current Zsh process instead of sourcing `.zshrc` repeatedly and accumulating plugin hooks.
+- zoxide initializes after completion and replaces the older `z` implementation when installed; the OMZ plugin remains available on link-only/minimal hosts.
+- Modern tools have distinct, discoverable aliases by default. Incompatible replacements for `grep`, `find`, `df`, and `top` require an explicit machine-local opt-in.
 
 ### tmux
 
@@ -67,6 +69,8 @@ The editor configuration was later narrowed to a plugin-free Vim setup for termi
 - eza powers explicit interactive listing aliases while the platform `ls` command retains its normal compatibility.
 - direnv uses its official late Zsh hook and retains the visible, explicit `direnv allow` trust step.
 - Hyperfine and btop are part of the base workstation profile; neither adds shell startup work.
+- zoxide, duf, tealdeer, and just are part of the base profile; bat, tealdeer, and Fastfetch have managed XDG configuration.
+- Fastfetch 2.67.1 replaces the archived Neofetch package through a pinned amd64/arm64 archive, SHA-256 verification, versioned installation, and managed completion/man-page links.
 - Mike Farah yq v4.53.3 is installed from its official release with pinned amd64/arm64 SHA-256 values and a generated Zsh completion. The incompatible Ubuntu `yq` package is no longer requested.
 
 After the change, warm TTY startup measured 0.08-0.12 seconds with the same configuration and cache setup. NVM remained unloaded at the prompt and loaded successfully on the first `node` invocation. These are local measurements rather than a promise for every machine, but they confirm that the selected bottleneck was real.
@@ -74,10 +78,8 @@ After the change, warm TTY startup measured 0.08-0.12 seconds with the same conf
 ## Deferred options
 
 - **fzf-tab:** its full-screen completion selector is attractive for very large completion sets, but it must load after `compinit` and before widget-wrapping plugins, and it competes with both fzf's and `z`'s Tab wrappers. Native menu completion plus explicit fzf keys has fewer moving parts.
-- **zoxide:** it is the best next replacement for `z` if a newer, consistently installed binary becomes part of the base profile. It should replace `z`, not run beside it.
 - **Starship:** useful when a shared cross-shell prompt with language/tool context is wanted. The current Lambda prompt is small and did not appear in the startup profile, so adding a binary and more prompt subprocess work has no measured payoff here.
 - **TPM, tmux-resurrect, and seamless Vim/tmux navigation:** worthwhile when session restoration or prefix-free pane crossing is explicitly desired. The latter also takes over global `Ctrl-H/J/K/L` behavior inside tmux, including `Ctrl-L`'s usual clear-screen action.
-- **Fastfetch:** revisit when the minimum Ubuntu release is 25.04+ or when a pinned official release installer is acceptable.
 
 ## Primary references
 
@@ -96,6 +98,10 @@ After the change, warm TTY startup measured 0.08-0.12 seconds with the same conf
 - [Delta setup and navigation](https://dandavison.github.io/delta/get-started.html)
 - [direnv hook and authorization model](https://direnv.net/)
 - [eza features and options](https://github.com/eza-community/eza)
+- [bat configuration](https://github.com/sharkdp/bat#configuration-file)
+- [duf usage and packages](https://github.com/muesli/duf)
+- [tealdeer configuration](https://docs.tealdeer.org/latest/config.html)
+- [just installation and recipes](https://github.com/casey/just)
 - [Hyperfine measurement model](https://github.com/sharkdp/hyperfine)
 - [Mike Farah yq releases and installation](https://github.com/mikefarah/yq)
 - [Ubuntu 24.04's different yq package](https://packages.ubuntu.com/noble/amd64/utils/yq)

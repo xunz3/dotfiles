@@ -5,7 +5,7 @@
 #   bin/dot toolchains
 #   bin/dot packages --toolchains
 #
-# Available profiles: node java rust go python bun
+# Available profiles: node java rust go python bun agent
 # Leave this empty to install no optional toolchains by default.
 export DOTFILES_TOOLCHAINS=""
 

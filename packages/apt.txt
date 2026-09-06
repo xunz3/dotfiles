@@ -1,5 +1,6 @@
 # Debian/Ubuntu-specific additions and package name differences.
 fd-find
+sd
 build-essential
 openssh-client
 dnsutils

@@ -858,19 +858,33 @@ test_cache_environment_consumers_reject_symlink_targets () {
 	[[ ! -e "$sentinel" ]] || fail_test 'zshenv sourced a symlink cache environment'
 }
 
+test_zshenv_path_is_idempotent () {
+	local test_home="$TEST_TMP_ROOT/zshenv-path-home"
+
+	mkdir -p "$test_home"
+	HOME="$test_home" \
+		PATH="/usr/bin:$test_home/.local/bin:/bin:$test_home/.local/bin" \
+		zsh -f -c '
+			source "$1"
+			source "$1"
+			[[ "$PATH" == "$HOME/.local/bin:/usr/bin:/bin" ]]
+		' _ "$ROOT/zsh/zshenv.symlink" || \
+		fail_test 'zshenv duplicated or reordered PATH entries after repeated loading'
+}
+
 test_shell_defaults_do_not_enable_proxies () {
 	local test_home="$TEST_TMP_ROOT/proxy-defaults-home"
 	local config_home="$test_home/config"
 	local source_file label proxy_name
 
 	mkdir -p "$test_home"
-	for source_file in "$ROOT/zsh/zshenv.symlink" "$ROOT/local/localrc.example"
+	for source_file in "$ROOT/zsh/zshenv.symlink" "$ROOT/local/localenv.example"
 	do
 		if [[ "$source_file" == "$ROOT/zsh/zshenv.symlink" ]]
 		then
 			label='zshenv'
 		else
-			label='localrc example'
+			label='localenv example'
 		fi
 		env -u HTTP_PROXY -u HTTPS_PROXY -u http_proxy -u https_proxy \
 			-u NO_PROXY -u no_proxy \
@@ -905,9 +919,16 @@ test_shell_defaults_do_not_enable_proxies () {
 	for proxy_name in HTTP_PROXY HTTPS_PROXY http_proxy https_proxy
 	do
 		grep -Eq "^[[:space:]]*#[[:space:]]+export[[:space:]]+$proxy_name=" \
-			"$ROOT/local/localrc.example" || \
-			fail_test "localrc example is missing the commented $proxy_name opt-in"
+			"$ROOT/local/localenv.example" || \
+			fail_test "localenv example is missing the commented $proxy_name opt-in"
 	done
+
+	printf '%s\n' 'export DOTFILES_LOCALENV_TEST=loaded' > "$test_home/.localenv"
+	HOME="$test_home" XDG_CONFIG_HOME="$config_home" zsh -f -c '
+		source "$1"
+		[[ "$DOTFILES_LOCALENV_TEST" == loaded ]]
+	' _ "$ROOT/zsh/zshenv.symlink" || \
+		fail_test 'zshenv did not load the machine-local environment'
 }
 
 test_clipboard_copy_selects_runtime_provider () {
@@ -987,6 +1008,7 @@ test_bootstrap_rejects_invalid_cache_workspace_before_mutation () {
 	copy_cache_env_script "$fixture"
 	cp "$ROOT/git/gitconfig.local.symlink.example" \
 		"$fixture/git/gitconfig.local.symlink.example"
+	cp "$ROOT/local/localenv.example" "$fixture/local/localenv.example"
 	cp "$ROOT/local/localrc.example" "$fixture/local/localrc.example"
 	cp "$ROOT/local/toolchainsrc.example" "$fixture/local/toolchainsrc.example"
 
@@ -1019,6 +1041,7 @@ test_bootstrap_rejects_invalid_cache_workspace_before_mutation () {
 		for forbidden in \
 			"$test_home/.dotfiles" \
 			"$test_home/.gitconfig.local" \
+			"$test_home/.localenv" \
 			"$test_home/.localrc" \
 			"$test_home/.toolchainsrc" \
 			"$config_home/dotfiles"
@@ -1520,6 +1543,7 @@ test_bootstrap_rejects_relative_state_home_before_mutation () {
 	copy_cache_env_script "$fixture"
 	cp "$ROOT/git/gitconfig.local.symlink.example" \
 		"$fixture/git/gitconfig.local.symlink.example"
+	cp "$ROOT/local/localenv.example" "$fixture/local/localenv.example"
 	cp "$ROOT/local/localrc.example" "$fixture/local/localrc.example"
 	cp "$ROOT/local/toolchainsrc.example" "$fixture/local/toolchainsrc.example"
 	printf 'managed foo\n' > "$fixture/topic/foo.symlink"
@@ -1545,6 +1569,7 @@ test_bootstrap_rejects_relative_state_home_before_mutation () {
 	for forbidden in \
 		"$test_home/.dotfiles" \
 		"$test_home/.gitconfig.local" \
+		"$test_home/.localenv" \
 		"$test_home/.localrc" \
 		"$test_home/.toolchainsrc" \
 		"$config_home" \
@@ -1848,7 +1873,7 @@ test_base_packages_include_interactive_tools () {
 		return 1
 	}
 
-	for package in btop direnv eza git-delta hyperfine vim
+	for package in btop direnv duf eza git-delta hyperfine just sd vim zoxide
 	do
 		grep -Fxq "$package" <<< "$output" || \
 			fail_test "base package profile is missing $package"
@@ -1856,6 +1881,14 @@ test_base_packages_include_interactive_tools () {
 	if grep -Fxq 'yq' <<< "$output"
 	then
 		fail_test 'ambiguous distro yq package remains in the system package profile'
+	fi
+	if grep -Fxq 'neofetch' <<< "$output"
+	then
+		fail_test 'archived Neofetch remains in the system package profile'
+	fi
+	if grep -Fxq 'tealdeer' <<< "$output"
+	then
+		fail_test 'stale distro Tealdeer remains in the system package profile'
 	fi
 }
 
@@ -1867,7 +1900,7 @@ test_vim_config_loads_standalone () {
 
 	mkdir -p "$test_home"
 	output="$(HOME="$test_home" vim -Nu "$ROOT/vim/vimrc.symlink" -i NONE -n -es \
-		+'if !&number || &relativenumber || &tabstop != 4 || !&expandtab | cquit 20 | endif' \
+		+'if !&number || !&relativenumber || !&undofile || &tabstop != 4 || !&expandtab | cquit 20 | endif' \
 		+qall 2>&1)"
 	status=$?
 
@@ -1877,6 +1910,18 @@ test_vim_config_loads_standalone () {
 	}
 	[[ ! -e "$test_home/.vim" ]] || \
 		fail_test 'Vim config created a plugin or runtime directory in a clean home'
+}
+
+test_tmux_status_conditions_do_not_leak_style_text () {
+	local status_line
+
+	status_line="$(grep -F 'set -g status-right ' "$ROOT/tmux/tmux.conf.symlink")"
+	assert_contains "$status_line" '#{?client_prefix,#[bold]#[bg=colour196]#[fg=colour231]'
+	assert_contains "$status_line" '#{?pane_in_mode,#[bold]#[fg=colour214]'
+	[[ "$status_line" != *'#{?client_prefix,#[bold,bg='* ]] || \
+		fail_test 'client-prefix condition contains an unescaped style comma'
+	[[ "$status_line" != *'#{?pane_in_mode,#[bold,fg='* ]] || \
+		fail_test 'copy-mode condition contains an unescaped style comma'
 }
 
 test_terminal_editor_defaults_to_vim () {
@@ -1957,7 +2002,7 @@ test_toolchains_have_no_implicit_default () {
 	[[ -z "$defaults" ]] || fail_test "unexpected default toolchain profiles: $defaults"
 
 	profiles="$(source "$ROOT/toolchains/lib/profiles.sh"; dotfiles_toolchain_all_profiles)"
-	[[ "$profiles" == $'node\njava\nrust\ngo\npython\nbun' ]] || \
+	[[ "$profiles" == $'node\njava\nrust\ngo\npython\nbun\nagent' ]] || \
 		fail_test "unexpected toolchain profile list: $profiles"
 }
 
@@ -2032,6 +2077,243 @@ test_eza_aliases_preserve_platform_ls () {
 	assert_contains "$output" "lt='eza --tree --level=2 --group-directories-first'"
 }
 
+test_modern_aliases_are_discoverable_and_guarded () {
+	local fake_bin="$TEST_TMP_ROOT/modern-alias-bin"
+	local command_name output
+
+	mkdir -p "$fake_bin"
+	for command_name in rg fdfind batcat duf sd btop tldr fastfetch
+	do
+		printf '%s\n' '#!/bin/sh' 'exit 0' > "$fake_bin/$command_name"
+		chmod +x "$fake_bin/$command_name"
+	done
+
+	output="$(PATH="$fake_bin:/usr/bin:/bin" DOTFILES_MODERN_ALIASES=0 \
+		zsh -f -c '
+			source "$1"
+			alias search; alias ff; alias fdir; alias disk; alias replace; alias bt; alias how
+			alias fetch; alias neofetch
+			if alias grep >/dev/null 2>&1 || alias find >/dev/null 2>&1 ||
+			   alias df >/dev/null 2>&1 || alias top >/dev/null 2>&1; then
+			  exit 30
+			fi
+		' _ "$ROOT/shell/core/aliases.zsh")" || {
+		printf '%s\n' "$output" >&2
+		return 1
+	}
+	assert_contains "$output" "search='rg --smart-case'"
+	assert_contains "$output" "ff='fd --type file'"
+	assert_contains "$output" "fdir='fd --type directory'"
+	assert_contains "$output" "disk=duf"
+	assert_contains "$output" "replace=sd"
+	assert_contains "$output" "neofetch=fastfetch"
+
+	output="$(PATH="$fake_bin:/usr/bin:/bin" DOTFILES_MODERN_ALIASES=1 \
+		zsh -f -c 'source "$1"; alias grep; alias find; alias df; alias top' \
+		_ "$ROOT/shell/core/aliases.zsh")" || {
+		printf '%s\n' "$output" >&2
+		return 1
+	}
+	assert_contains "$output" 'grep=rg'
+	assert_contains "$output" 'find=fd'
+	assert_contains "$output" 'df=duf'
+	assert_contains "$output" 'top=btop'
+}
+
+test_autoloaded_helpers_execute_on_first_call () {
+	local test_home="$TEST_TMP_ROOT/autoload-home"
+	local fake_bin="$TEST_TMP_ROOT/autoload-bin"
+	local archive_root="$TEST_TMP_ROOT/archive source"
+	local extract_root="$TEST_TMP_ROOT/archive output"
+	local archive="$TEST_TMP_ROOT/example archive.tar"
+
+	mkdir -p "$test_home" "$fake_bin" "$archive_root" "$extract_root"
+	printf '%s\n' \
+		'#!/bin/sh' \
+		'printf "%s\\0" "$@" > "$HOME/gf-args"' > "$fake_bin/git"
+	chmod +x "$fake_bin/git"
+	printf 'kept\n' > "$archive_root/file with spaces.txt"
+	tar -cf "$archive" -C "$archive_root" 'file with spaces.txt'
+
+	HOME="$test_home" PATH="$fake_bin:/usr/bin:/bin" zsh -f -c '
+		fpath=("$1" $fpath)
+		autoload -U gf
+		gf topic/name
+	' _ "$ROOT/shell/functions" || fail_test 'gf did not execute on first invocation'
+	assert_nul_args "$test_home/gf-args" switch --track origin/topic/name
+
+	HOME="$test_home" zsh -f -c '
+		fpath=("$1" $fpath)
+		autoload -U extract
+		cd "$2"
+		extract "$3"
+	' _ "$ROOT/shell/functions" "$extract_root" "$archive" || \
+		fail_test 'extract did not execute on first invocation'
+	[[ "$(< "$extract_root/file with spaces.txt")" == 'kept' ]] || \
+		fail_test 'extract did not preserve a path containing spaces'
+	[[ -f "$archive" ]] || fail_test 'extract removed the source archive'
+}
+
+test_search_wrapper_prefers_ripgrep () {
+	local test_home="$TEST_TMP_ROOT/search-home"
+	local fake_bin="$TEST_TMP_ROOT/search-bin"
+	local output status
+
+	mkdir -p "$test_home" "$fake_bin"
+	printf '%s\n' \
+		'#!/bin/sh' \
+		'printf "%s\\0" "$@" > "$HOME/search-args"' > "$fake_bin/rg"
+	chmod +x "$fake_bin/rg"
+
+	HOME="$test_home" PATH="$fake_bin:/usr/bin:/bin" \
+		"$ROOT/bin/search" Needle 'path with spaces' || \
+		fail_test 'search did not dispatch to ripgrep'
+	assert_nul_args "$test_home/search-args" --smart-case Needle 'path with spaces'
+
+	output="$(HOME="$test_home" PATH="$fake_bin:/usr/bin:/bin" \
+		"$ROOT/bin/search" 2>&1)"
+	status=$?
+	[[ $status -eq 2 ]] || fail_test "search without a pattern returned $status"
+	assert_contains "$output" 'usage: search <pattern> [path ...]'
+}
+
+test_search_fallback_preserves_smart_case () {
+	local fake_bin="$TEST_TMP_ROOT/search-fallback-bin"
+	local file="$TEST_TMP_ROOT/search fallback.txt"
+	local output
+
+	mkdir -p "$fake_bin"
+	ln -s "$(command -v grep)" "$fake_bin/grep"
+	printf 'Needle\nneedle\n' > "$file"
+	output="$(PATH="$fake_bin" "$ROOT/bin/search" needle "$file")" || \
+		fail_test 'grep fallback failed for a lowercase pattern'
+	assert_contains "$output" '1:Needle'
+	assert_contains "$output" '2:needle'
+	output="$(PATH="$fake_bin" "$ROOT/bin/search" Needle "$file")" || \
+		fail_test 'grep fallback failed for an uppercase pattern'
+	[[ "$output" == '1:Needle' ]] || fail_test 'grep fallback ignored smart-case matching'
+}
+
+test_git_helpers_propagate_query_failures () {
+	local fake_bin="$TEST_TMP_ROOT/git-query-failure-bin"
+	local helper output status
+
+	mkdir -p "$fake_bin"
+	printf '%s\n' \
+		'#!/bin/sh' \
+		'case "$1" in' \
+		'  branch) printf "topic\n" ;;' \
+		'  ls-files|for-each-ref) echo "query failed" >&2; exit 23 ;;' \
+		'esac' > "$fake_bin/git"
+	chmod +x "$fake_bin/git"
+	for helper in git-edit-new git-delete-local-merged
+	do
+		output="$(PATH="$fake_bin:/usr/bin:/bin" "$ROOT/bin/$helper" 2>&1)"
+		status=$?
+		[[ $status -eq 23 ]] || fail_test "$helper hid Git's failure with status $status"
+		assert_contains "$output" 'query failed'
+		[[ "$output" != *'no untracked files'* ]] || \
+			fail_test "$helper reported a failed query as an empty result"
+	done
+}
+
+test_modern_command_wrappers_preserve_arguments_and_git_safety () {
+	local test_home="$TEST_TMP_ROOT/command-wrapper-home"
+	local fake_bin="$TEST_TMP_ROOT/command-wrapper-bin"
+	local repo="$TEST_TMP_ROOT/command-wrapper-repo"
+	local remote="$TEST_TMP_ROOT/command-wrapper-origin.git"
+	local output
+
+	mkdir -p "$test_home" "$fake_bin"
+	printf '%s\n' \
+		'#!/bin/sh' \
+		'printf "%s\\0" "$@" > "$ARG_LOG"' > "$fake_bin/editor"
+	cp "$fake_bin/editor" "$fake_bin/code"
+	chmod +x "$fake_bin/editor" "$fake_bin/code"
+
+	ARG_LOG="$test_home/e-args" VISUAL="$fake_bin/editor" \
+		"$ROOT/bin/e" 'file with spaces' second || fail_test 'e failed'
+	assert_nul_args "$test_home/e-args" 'file with spaces' second
+
+	ARG_LOG="$test_home/ee-args" PATH="$fake_bin:/usr/bin:/bin" \
+		"$ROOT/bin/ee" 'file with spaces' second || fail_test 'ee failed'
+	assert_nul_args "$test_home/ee-args" --wait 'file with spaces' second
+
+	git init --quiet --bare "$remote" || fail_test 'could not create a test remote'
+	git init --quiet "$repo" || fail_test 'could not create a test repository'
+	git -C "$remote" symbolic-ref HEAD refs/heads/main
+	(
+		export HOME="$test_home"
+		export GIT_CONFIG_GLOBAL=/dev/null
+		export GIT_CONFIG_NOSYSTEM=1
+		cd "$repo" || exit 1
+		git config user.name 'Dotfiles Test'
+		git config user.email 'dotfiles@example.invalid'
+		git switch --quiet --create main
+		printf 'base\n' > tracked
+		git add tracked
+		git commit --quiet -m base
+		git remote add origin "$remote"
+		git push --quiet --set-upstream origin main
+		git remote set-head origin main
+
+		git switch --quiet --create topic-safe
+		printf 'topic\n' >> tracked
+		git commit --quiet --all -m topic
+		"$ROOT/bin/git-promote" >/dev/null 2>&1
+
+		if output=$("$ROOT/bin/git-nuke" topic-safe 2>&1); then
+			fail_test 'git-nuke deleted the current branch'
+		fi
+		assert_contains "$output" 'refusing to delete protected branch'
+		git show-ref --verify --quiet refs/heads/topic-safe || \
+			fail_test 'git-nuke removed a protected local branch'
+
+		git switch --quiet main
+		"$ROOT/bin/git-nuke" topic-safe >/dev/null 2>&1
+		! git show-ref --verify --quiet refs/heads/topic-safe || \
+			fail_test 'git-nuke left the local topic branch behind'
+		! git ls-remote --exit-code --heads origin refs/heads/topic-safe >/dev/null 2>&1 || \
+			fail_test 'git-nuke left the remote topic branch behind'
+
+		printf 'new\n' > 'untracked file.txt'
+		printf 'new\n' > '-option.txt'
+		printf 'new\n' > '+command.txt'
+		ARG_LOG="$test_home/git-edit-new-args" VISUAL="$fake_bin/editor" \
+			"$ROOT/bin/git-edit-new"
+	) || return 1
+	assert_nul_args "$test_home/git-edit-new-args" \
+		'./+command.txt' './-option.txt' './untracked file.txt'
+}
+
+test_zoxide_replaces_the_legacy_z_plugin () {
+	local test_home="$TEST_TMP_ROOT/zoxide-home"
+	local fake_bin="$TEST_TMP_ROOT/zoxide-bin"
+	local output
+
+	mkdir -p "$test_home" "$fake_bin"
+	printf '%s\n' \
+		'#!/bin/sh' \
+		'if [ "${1:-}" = init ] && [ "${2:-}" = zsh ]; then' \
+		'  printf "typeset -g DOTFILES_ZOXIDE_TEST=loaded\\n"' \
+		'else' \
+		'  exit 1' \
+		'fi' > "$fake_bin/zoxide"
+	chmod +x "$fake_bin/zoxide"
+
+	output="$(HOME="$test_home" PATH="$fake_bin:/usr/bin:/bin" \
+		DOTFILES="$ROOT" DOTFILES_USE_OH_MY_ZSH=0 \
+		ZDOTDIR="$test_home" ZSH_CACHE_DIR="$test_home/cache" \
+		zsh -f -c 'source "$1"; print -r -- "${DOTFILES_ZOXIDE_TEST:-missing}"' \
+		_ "$ROOT/zsh/zshrc.symlink")" || {
+		printf '%s\n' "$output" >&2
+		return 1
+	}
+
+	[[ "${output##*$'\n'}" == 'loaded' ]] || \
+		fail_test 'zoxide was not initialized after fallback compinit'
+}
+
 test_direnv_hook_loads_in_fallback_zsh () {
 	local test_home="$TEST_TMP_ROOT/direnv-home"
 	local fake_bin="$TEST_TMP_ROOT/direnv-bin"
@@ -2101,6 +2383,111 @@ test_toolchain_profile_failure_reaches_exit_status () {
 	assert_contains "$output" 'profile: go'
 }
 
+test_agent_profile_uses_official_installers () {
+	local test_home="$TEST_TMP_ROOT/agent-toolchain-home"
+	local fake_bin="$TEST_TMP_ROOT/agent-toolchain-bin"
+	local output
+	local -a urls=()
+
+	mkdir -p "$test_home" "$fake_bin"
+	printf '%s\n' '#!/bin/sh' 'exit 0' > "$fake_bin/node"
+	cp "$fake_bin/node" "$fake_bin/npm"
+	chmod +x "$fake_bin/node" "$fake_bin/npm"
+	printf '%s\n' \
+		'#!/usr/bin/env bash' \
+		'output=' \
+		'url=' \
+		'while [[ $# -gt 0 ]]; do' \
+		'  case "$1" in' \
+		'    -o) output=$2; shift 2 ;;' \
+		'    http*) url=$1; shift ;;' \
+		'    *) shift ;;' \
+		'  esac' \
+		'done' \
+		'case "$url" in' \
+		'  https://chatgpt.com/codex/install.sh) tool=codex ;;' \
+		'  https://pi.dev/install.sh) tool=pi ;;' \
+		'  *) exit 1 ;;' \
+		'esac' \
+		'printf "%s\n" "$url" >> "$HOME/agent-install-urls"' \
+		'printf "%s\n" "#!/bin/sh" "mkdir -p \"\$HOME/.local/bin\"" "printf \"#!/bin/sh\\\\nexit 0\\\\n\" > \"\$HOME/.local/bin/$tool\"" "chmod +x \"\$HOME/.local/bin/$tool\"" > "$output"' > \
+		"$fake_bin/curl"
+	chmod +x "$fake_bin/curl"
+
+	output="$(HOME="$test_home" PATH="$fake_bin:/usr/bin:/bin" \
+		"$ROOT/toolchains/install.sh" agent 2>&1)" || {
+		printf '%s\n' "$output" >&2
+		return 1
+	}
+	mapfile -t urls < "$test_home/agent-install-urls"
+	[[ "${urls[*]}" == \
+		'https://chatgpt.com/codex/install.sh https://pi.dev/install.sh' ]] || \
+		fail_test "agent profile used unexpected installer URLs: ${urls[*]}"
+	[[ -x "$test_home/.local/bin/codex" ]] || fail_test 'agent profile did not install codex'
+	[[ -x "$test_home/.local/bin/pi" ]] || fail_test 'agent profile did not install pi'
+	assert_contains "$output" 'profiles: 1 succeeded, 0 failed'
+
+	output="$(HOME="$test_home" PATH="$fake_bin:/usr/bin:/bin" \
+		"$ROOT/toolchains/install.sh" agent 2>&1)" || {
+		printf '%s\n' "$output" >&2
+		return 1
+	}
+	[[ "$(wc -l < "$test_home/agent-install-urls")" -eq 2 ]] || \
+		fail_test 'agent profile reran installers for available commands'
+}
+
+test_agent_profile_prepares_pi_runtime_and_reports_failure () {
+	local test_home="$TEST_TMP_ROOT/agent-runtime-home"
+	local output
+
+	mkdir -p "$test_home"
+	output="$(HOME="$test_home" bash -s -- "$ROOT" <<'BASH'
+set -uo pipefail
+source "$1/toolchains/lib/common.sh"
+source "$1/toolchains/profiles/agent.sh"
+runtime_ready=false
+pi_ready=false
+runtime_fails=false
+have_command () {
+  case "$1" in
+    codex) return 0 ;;
+    node|npm) [[ "$runtime_ready" == true ]] ;;
+    pi) [[ "$pi_ready" == true ]] ;;
+    *) return 1 ;;
+  esac
+}
+node () { [[ "$runtime_ready" == true ]]; }
+install_nvm () { [[ "$runtime_fails" == false ]]; }
+source_nvm () { return 0; }
+nvm () {
+  case "$*" in
+    'install --lts') printf 'installed runtime\n' >> "$HOME/runtime-installs" ;;
+    'use --lts') runtime_ready=true ;;
+    *) return 1 ;;
+  esac
+}
+run_remote_script () {
+  [[ "$1" == https://pi.dev/install.sh && "$runtime_ready" == true ]] || return 1
+  pi_ready=true
+  printf 'installed pi\n' >> "$HOME/pi-installs"
+}
+profile_agent || exit 10
+profile_agent || exit 11
+[[ $(wc -l < "$HOME/runtime-installs") -eq 1 ]] || exit 12
+[[ $(wc -l < "$HOME/pi-installs") -eq 1 ]] || exit 13
+runtime_ready=false
+pi_ready=false
+runtime_fails=true
+if profile_agent; then exit 14; fi
+[[ $(wc -l < "$HOME/pi-installs") -eq 1 ]] || exit 15
+BASH
+	)" || {
+		printf '%s\n' "$output" >&2
+		return 1
+	}
+	assert_contains "$output" 'Agent tools failed: pi'
+}
+
 test_remote_script_runner_propagates_status () {
 	local fake_bin="$TEST_TMP_ROOT/remote-script-bin"
 	local status
@@ -2120,6 +2507,221 @@ test_remote_script_runner_propagates_status () {
 	status=$?
 
 	[[ $status -eq 23 ]] || fail_test "expected status 23, got $status"
+}
+
+test_fastfetch_reconciles_existing_target_version () {
+	local test_home="$TEST_TMP_ROOT/fastfetch-home"
+	local install_root="$test_home/.local/opt"
+	local data_home="$test_home/.local/share"
+	local current_dir="$install_root/fastfetch-2.67.1"
+	local output
+
+	mkdir -p "$current_dir/usr/bin" \
+		"$current_dir/usr/share/zsh/site-functions" \
+		"$current_dir/usr/share/man/man1" \
+		"$test_home/.local/bin" "$data_home/zsh/site-functions" \
+		"$data_home/man/man1"
+	printf '%s\n' '#!/bin/sh' 'exit 0' > "$current_dir/usr/bin/fastfetch"
+	printf '#compdef fastfetch\n' > \
+		"$current_dir/usr/share/zsh/site-functions/_fastfetch"
+	printf '.TH FASTFETCH 1\n' > \
+		"$current_dir/usr/share/man/man1/fastfetch.1"
+	chmod +x "$current_dir/usr/bin/fastfetch"
+	ln -s "$install_root/fastfetch-2.67.0" "$install_root/fastfetch-current"
+	ln -s "$install_root/fastfetch-2.67.0/usr/bin/fastfetch" \
+		"$test_home/.local/bin/fastfetch"
+	ln -s "$install_root/fastfetch-2.67.0/usr/share/zsh/site-functions/_fastfetch" \
+		"$data_home/zsh/site-functions/_fastfetch"
+	ln -s "$install_root/fastfetch-2.67.0/usr/share/man/man1/fastfetch.1" \
+		"$data_home/man/man1/fastfetch.1"
+
+	output="$(HOME="$test_home" "$ROOT/fastfetch/install.sh" 2>&1)" || {
+		printf '%s\n' "$output" >&2
+		return 1
+	}
+
+	[[ "$(readlink "$install_root/fastfetch-current")" == "$current_dir" ]] || \
+		fail_test 'fastfetch-current did not switch to the requested version'
+	[[ "$(readlink "$test_home/.local/bin/fastfetch")" == \
+		"$install_root/fastfetch-current/usr/bin/fastfetch" ]] || \
+		fail_test '~/.local/bin/fastfetch was not reconciled'
+	[[ "$(readlink "$data_home/zsh/site-functions/_fastfetch")" == \
+		"$install_root/fastfetch-current/usr/share/zsh/site-functions/_fastfetch" ]] || \
+		fail_test 'the Fastfetch Zsh completion was not reconciled'
+	[[ "$(readlink "$data_home/man/man1/fastfetch.1")" == \
+		"$install_root/fastfetch-current/usr/share/man/man1/fastfetch.1" ]] || \
+		fail_test 'the Fastfetch man page was not reconciled'
+	assert_contains "$output" 'selected Fastfetch 2.67.1'
+}
+
+test_fastfetch_rejects_checksum_mismatch () {
+	local test_home="$TEST_TMP_ROOT/fastfetch-checksum-home"
+	local fake_bin="$TEST_TMP_ROOT/fastfetch-checksum-bin"
+	local output status
+
+	mkdir -p "$test_home" "$fake_bin"
+	printf '%s\n' \
+		'#!/usr/bin/env bash' \
+		'output=' \
+		'while [[ $# -gt 0 ]]; do' \
+		'  if [[ "$1" == -o ]]; then output=$2; shift 2; else shift; fi' \
+		'done' \
+		'printf "not a Fastfetch archive\\n" > "$output"' > "$fake_bin/curl"
+	chmod +x "$fake_bin/curl"
+
+	output="$(HOME="$test_home" PATH="$fake_bin:$PATH" \
+		DOTFILES_FASTFETCH_VERSION=9.9.9 \
+		DOTFILES_FASTFETCH_SHA256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+		"$ROOT/fastfetch/install.sh" 2>&1)"
+	status=$?
+
+	[[ $status -eq 1 ]] || fail_test "expected status 1, got $status"
+	assert_contains "$output" 'archive checksum mismatch'
+	[[ ! -e "$test_home/.local/opt/fastfetch-9.9.9" ]] || \
+		fail_test 'invalid Fastfetch archive was installed'
+}
+
+test_tealdeer_reconciles_existing_target_version () {
+	local test_home="$TEST_TMP_ROOT/tealdeer-home"
+	local install_root="$test_home/.local/opt"
+	local data_home="$test_home/.local/share"
+	local current_dir="$install_root/tealdeer-1.8.1"
+	local output
+
+	mkdir -p "$current_dir/completions" "$test_home/.local/bin" \
+		"$data_home/zsh/site-functions"
+	printf '%s\n' '#!/bin/sh' 'printf "tealdeer 1.8.1\n"' > "$current_dir/tldr"
+	printf '#compdef tldr\n' > "$current_dir/completions/_tldr"
+	chmod +x "$current_dir/tldr"
+	ln -s "$install_root/tealdeer-1.7.0" "$install_root/tealdeer-current"
+	ln -s "$install_root/tealdeer-1.7.0/tldr" "$test_home/.local/bin/tldr"
+	ln -s "$install_root/tealdeer-1.7.0/completions/_tldr" \
+		"$data_home/zsh/site-functions/_tldr"
+
+	output="$(HOME="$test_home" "$ROOT/tealdeer/install.sh" 2>&1)" || {
+		printf '%s\n' "$output" >&2
+		return 1
+	}
+
+	[[ "$(readlink "$install_root/tealdeer-current")" == "$current_dir" ]] || \
+		fail_test 'tealdeer-current did not switch to the requested version'
+	[[ "$(readlink "$test_home/.local/bin/tldr")" == \
+		"$install_root/tealdeer-current/tldr" ]] || \
+		fail_test '~/.local/bin/tldr was not reconciled'
+	[[ "$(readlink "$data_home/zsh/site-functions/_tldr")" == \
+		"$install_root/tealdeer-current/completions/_tldr" ]] || \
+		fail_test 'the Tealdeer Zsh completion was not reconciled'
+	assert_contains "$output" 'selected Tealdeer 1.8.1'
+}
+
+test_tealdeer_rejects_checksum_mismatch () {
+	local test_home="$TEST_TMP_ROOT/tealdeer-checksum-home"
+	local fake_bin="$TEST_TMP_ROOT/tealdeer-checksum-bin"
+	local output status
+
+	mkdir -p "$test_home" "$fake_bin"
+	printf '%s\n' \
+		'#!/usr/bin/env bash' \
+		'output=' \
+		'while [[ $# -gt 0 ]]; do' \
+		'  if [[ "$1" == -o ]]; then output=$2; shift 2; else shift; fi' \
+		'done' \
+		'printf "not Tealdeer\n" > "$output"' > "$fake_bin/curl"
+	chmod +x "$fake_bin/curl"
+
+	output="$(HOME="$test_home" PATH="$fake_bin:$PATH" \
+		DOTFILES_TEALDEER_VERSION=9.9.9 \
+		DOTFILES_TEALDEER_SHA256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+		DOTFILES_TEALDEER_COMPLETION_SHA256=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb \
+		"$ROOT/tealdeer/install.sh" 2>&1)"
+	status=$?
+
+	[[ $status -eq 1 ]] || fail_test "expected status 1, got $status"
+	assert_contains "$output" 'binary checksum mismatch'
+	[[ ! -e "$test_home/.local/opt/tealdeer-9.9.9" ]] || \
+		fail_test 'invalid Tealdeer binary was installed'
+}
+
+test_doctor_is_read_only_and_available_through_dot () {
+	local test_home="$TEST_TMP_ROOT/doctor-home"
+	local output
+
+	mkdir -p "$test_home"
+	output="$(HOME="$test_home" NO_COLOR=1 "$ROOT/bin/dot" doctor 2>&1)" || {
+		printf '%s\n' "$output" >&2
+		return 1
+	}
+
+	assert_contains "$output" 'Dotfiles doctor'
+	assert_contains "$output" 'Managed links'
+	assert_contains "$output" 'Preferred CLI toolbox'
+	assert_contains "$output" 'compatibility aliases disabled'
+	[[ -z "$(find "$test_home" -mindepth 1 -print -quit)" ]] || \
+		fail_test 'dot doctor changed the test home'
+}
+
+test_doctor_rejects_tealdeer_with_retired_cache_url () {
+	local test_home="$TEST_TMP_ROOT/doctor-tealdeer-home"
+	local fake_bin="$TEST_TMP_ROOT/doctor-tealdeer-bin"
+	local output
+
+	mkdir -p "$test_home" "$fake_bin"
+	printf '%s\n' '#!/bin/sh' 'printf "tealdeer 1.6.1\n"' > "$fake_bin/tldr"
+	chmod +x "$fake_bin/tldr"
+
+	output="$(HOME="$test_home" NO_COLOR=1 PATH="$fake_bin:/usr/bin:/bin" \
+		"$ROOT/bin/dot" doctor 2>&1)" || {
+		printf '%s\n' "$output" >&2
+		return 1
+	}
+	assert_contains "$output" '1.6.1 uses the retired cache URL'
+}
+
+test_dot_task_runs_the_repository_justfile_from_any_directory () {
+	local test_home="$TEST_TMP_ROOT/dot-task-home"
+	local fake_bin="$TEST_TMP_ROOT/dot-task-bin"
+
+	mkdir -p "$test_home" "$fake_bin"
+	printf '%s\n' \
+		'#!/bin/sh' \
+		'printf "%s\\0" "$@" > "$HOME/dot-task-args"' > "$fake_bin/just"
+	chmod +x "$fake_bin/just"
+
+	(
+		cd "$test_home" || exit 1
+		HOME="$test_home" PATH="$fake_bin:/usr/bin:/bin" "$ROOT/bin/dot" task
+	) || fail_test 'dot task failed outside the repository'
+	assert_nul_args "$test_home/dot-task-args" \
+		--justfile "$ROOT/justfile" --working-directory "$ROOT" --list
+}
+
+test_just_lint_checks_each_shell_file () {
+	local fixture="$TEST_TMP_ROOT/lint-repo"
+	local file output
+	local files=(shell/first.zsh shell/second.zsh fastfetch/install.sh tealdeer/install.sh test/run.sh)
+
+	if ! command -v just >/dev/null 2>&1
+	then
+		printf '    SKIP: just is not installed\n'
+		return 0
+	fi
+	mkdir -p "$fixture"/{bin,script,ssh,toolchains,fastfetch,tealdeer,yq,zsh,test,shell}
+	cp "$ROOT/justfile" "$fixture/justfile"
+	for file in "${files[@]}"
+	do
+		printf '%s\n' '#!/usr/bin/env bash' 'true' > "$fixture/$file"
+	done
+	output="$(just --justfile "$fixture/justfile" lint 2>&1)" || \
+		fail_test "lint rejected valid shell files: $output"
+	for file in "${files[@]}"
+	do
+		printf '%s\n' '#!/usr/bin/env bash' 'if then' > "$fixture/$file"
+		if output="$(just --justfile "$fixture/justfile" lint 2>&1)"
+		then
+			fail_test "lint missed a syntax error in $file"
+		fi
+		printf '%s\n' '#!/usr/bin/env bash' 'true' > "$fixture/$file"
+	done
 }
 
 test_yq_reconciles_existing_target_version () {
@@ -2218,6 +2820,7 @@ run_test 'cache env preserves a final compatibility file replacement' test_cache
 run_test 'cache env preserves a final compatibility symlink replacement' test_cache_env_preserves_final_compatibility_replacement link
 run_test 'cache env publishes versions atomically' test_cache_env_version_publication_is_atomic
 run_test 'cache environment consumers reject symlink targets' test_cache_environment_consumers_reject_symlink_targets
+run_test 'zshenv PATH initialization is idempotent' test_zshenv_path_is_idempotent
 run_test 'shell defaults do not enable proxies' test_shell_defaults_do_not_enable_proxies
 run_test 'clipboard copy selects a runtime provider' test_clipboard_copy_selects_runtime_provider
 run_test 'bootstrap cache configuration is opt-in' test_bootstrap_cache_environment_is_opt_in
@@ -2246,16 +2849,34 @@ run_test 'user mode skips manager and aggregates topics' test_user_mode_skips_ma
 run_test 'package failures reach the top-level status' test_package_failure_reaches_exit_status
 run_test 'base package profile includes interactive tools' test_base_packages_include_interactive_tools
 run_test 'Vim config loads standalone' test_vim_config_loads_standalone
+run_test 'tmux status conditions keep style text out of the bar' test_tmux_status_conditions_do_not_leak_style_text
 run_test 'terminal editor defaults use Vim' test_terminal_editor_defaults_to_vim
 run_test 'dot edit uses terminal editor priority' test_dot_edit_uses_terminal_editor_priority
 run_test 'toolchains have no implicit default' test_toolchains_have_no_implicit_default
 run_test 'legacy toolchain selection remains upgrade-safe' test_legacy_toolchain_selection_is_upgrade_safe
 run_test 'empty toolchain environment overrides local config' test_empty_toolchain_environment_overrides_file
 run_test 'eza aliases preserve the platform ls command' test_eza_aliases_preserve_platform_ls
+run_test 'modern aliases are discoverable and guarded' test_modern_aliases_are_discoverable_and_guarded
+run_test 'autoloaded helpers execute on first call' test_autoloaded_helpers_execute_on_first_call
+run_test 'search wrapper prefers ripgrep' test_search_wrapper_prefers_ripgrep
+run_test 'search fallback preserves smart-case matching' test_search_fallback_preserves_smart_case
+run_test 'Git helpers propagate query failures' test_git_helpers_propagate_query_failures
+run_test 'command wrappers preserve arguments and guard Git branches' test_modern_command_wrappers_preserve_arguments_and_git_safety
+run_test 'zoxide replaces the legacy z plugin' test_zoxide_replaces_the_legacy_z_plugin
 run_test 'direnv hook loads in fallback Zsh' test_direnv_hook_loads_in_fallback_zsh
 run_test 'Git pager prefers Delta and falls back for filters' test_git_pager_prefers_delta_and_has_filter_fallback
 run_test 'toolchain profile failures reach the top-level status' test_toolchain_profile_failure_reaches_exit_status
+run_test 'agent profile uses official installers' test_agent_profile_uses_official_installers
+run_test 'agent profile prepares Pi runtime and reports failures' test_agent_profile_prepares_pi_runtime_and_reports_failure
 run_test 'downloaded script failures reach the profile' test_remote_script_runner_propagates_status
+run_test 'Fastfetch reconciles an existing target version' test_fastfetch_reconciles_existing_target_version
+run_test 'Fastfetch rejects checksum mismatches' test_fastfetch_rejects_checksum_mismatch
+run_test 'Tealdeer reconciles an existing target version' test_tealdeer_reconciles_existing_target_version
+run_test 'Tealdeer rejects checksum mismatches' test_tealdeer_rejects_checksum_mismatch
+run_test 'doctor is read-only and available through dot' test_doctor_is_read_only_and_available_through_dot
+run_test 'doctor flags Tealdeer builds with the retired cache URL' test_doctor_rejects_tealdeer_with_retired_cache_url
+run_test 'dot task works outside the repository' test_dot_task_runs_the_repository_justfile_from_any_directory
+run_test 'just lint checks each shell file' test_just_lint_checks_each_shell_file
 run_test 'yq reconciles an existing target version' test_yq_reconciles_existing_target_version
 run_test 'yq preserves an unmanaged binary symlink' test_yq_preserves_unmanaged_binary_symlink
 run_test 'yq rejects checksum mismatches' test_yq_rejects_checksum_mismatch

@@ -26,6 +26,7 @@ Profiles:
   go     Install common Go tools with go install
   python Install uv and selected Python CLI tools
   bun    Install bun
+  agent  Install Codex CLI and Pi Agent
   all    Install every profile
 
 Commands:

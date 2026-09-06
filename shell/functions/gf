@@ -1,4 +1,6 @@
-gf() {
-  local branch=$1
-  git checkout -b $branch origin/$branch
-}
+if [[ $# -ne 1 || -z "$1" ]]; then
+  echo 'usage: gf <remote-branch>' >&2
+  return 2
+fi
+
+git switch --track "origin/$1"

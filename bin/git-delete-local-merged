@@ -2,7 +2,18 @@
 #
 # Delete all local branches that have been merged into HEAD. Stolen from
 # our favorite @tekkub:
-#
-#   https://plus.google.com/115587336092124934674/posts/dXsagsvLakJ
 
-git branch -d `git branch --merged | grep -v '^*' | grep -v 'master' | tr -d '\n'`
+set -eu
+
+current=$(git branch --show-current)
+branches=$(git for-each-ref --format='%(refname:short)' --merged HEAD refs/heads)
+[ -n "$branches" ] || exit 0
+
+printf '%s\n' "$branches" |
+  while IFS= read -r branch; do
+    case "$branch" in
+      "$current" | main | master | trunk) continue ;;
+    esac
+
+    git branch -d -- "$branch"
+  done

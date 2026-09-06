@@ -8,5 +8,28 @@
 #
 #   git nuke add-git-nuke
 
-git branch -D $1
-git push origin :$1
+set -eu
+
+if [ "$#" -ne 1 ]; then
+  echo "usage: git nuke <branch>" >&2
+  exit 2
+fi
+
+branch=$(git check-ref-format --branch "$1") || exit 2
+current=$(git branch --show-current)
+default_branch=$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)
+default_branch=${default_branch#origin/}
+
+case "$branch" in
+  "$current" | "$default_branch" | main | master | trunk)
+    echo "git-nuke: refusing to delete protected branch '$branch'" >&2
+    exit 1
+    ;;
+esac
+
+# Delete the remote first: if that fails, preserve the local branch for recovery.
+git push origin --delete "$branch"
+
+if git show-ref --verify --quiet "refs/heads/$branch"; then
+  git branch -D -- "$branch"
+fi

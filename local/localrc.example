@@ -1,12 +1,11 @@
 # Local-only overrides for this machine.
 # This file is copied to ~/.localrc on first bootstrap if it does not exist.
 
-# export PROJECTS="$HOME/projects"
-# export HTTP_PROXY="http://127.0.0.1:7897"
-# export HTTPS_PROXY="$HTTP_PROXY"
-# export http_proxy="$HTTP_PROXY"
-# export https_proxy="$HTTPS_PROXY"
-# export OPENAI_API_KEY=""
+# Let modern interactive tools replace a few traditional command names:
+# grep -> rg, find -> fd, df -> duf, and top -> btop. Their option grammars
+# differ, so this stays opt-in. Use `command grep` or `\grep` to bypass an
+# alias for one invocation.
+# export DOTFILES_MODERN_ALIASES=1
 
 # Local shell hooks are allowed here when they are machine-specific.
 # if [[ -r "$HOME/path/to/local/tool.sh" ]]; then

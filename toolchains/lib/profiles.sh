@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 dotfiles_toolchain_all_profiles () {
-	printf '%s\n' node java rust go python bun
+	printf '%s\n' node java rust go python bun agent
 }
 
 dotfiles_toolchain_profile_is_retired () {

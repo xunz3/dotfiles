@@ -1,5 +1,6 @@
 # Arch-family specific additions and package name differences.
 fd
+sd
 base-devel
 openssh
 bind

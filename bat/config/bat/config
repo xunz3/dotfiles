@@ -1,0 +1,9 @@
+# Human-facing bat output: enough context to navigate, without a heavy frame.
+--style="numbers,changes,header"
+--paging="auto"
+--wrap="never"
+
+# Common files whose names do not carry a useful extension.
+--map-syntax ".env*:DotENV"
+--map-syntax ".gitignore:Git Ignore"
+--map-syntax "Dockerfile*:Dockerfile"

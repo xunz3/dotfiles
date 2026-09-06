@@ -21,6 +21,15 @@ then
 fi
 unset dotfiles_config_home dotfiles_cache_root dotfiles_cache_helper
 
+# Environment needed by non-interactive shells belongs in a machine-local
+# file, rather than in this public repository or the interactive ~/.localrc.
+if [[ -r "$HOME/.localenv" ]]
+then
+	source "$HOME/.localenv"
+fi
+
 [[ -s "$HOME/.cargo/env" ]] && source "$HOME/.cargo/env"
 
-export PATH="$HOME/.local/bin:$PATH"
+typeset -U path
+path=("$HOME/.local/bin" $path)
+export PATH

@@ -1,10 +1,25 @@
-#!/bin/sh
+#!/usr/bin/env bash
 #
 # Open new, unstaged files in your $EDITOR.
 #
 # This is nice to have when you run a command line generator which generates a
 # file or three in your working directory, and you know you want to immediately
-# edit them in your editor next. Why waste time clicking around like some sort
-# of plebian when you can just run another command?
+# edit them in your editor next.
 
-$EDITOR $(git ls-files --others --exclude-standard)
+set -euo pipefail
+
+mapfile -d '' -t files < <(git ls-files -z --others --exclude-standard)
+# mapfile cannot report a failed producer; wait for Git before opening files.
+wait "$!"
+
+if ((${#files[@]} == 0)); then
+  echo "git-edit-new: no untracked files" >&2
+  exit 0
+fi
+
+editor=${VISUAL:-${EDITOR:-vim}}
+# Explicit paths keep names starting with '-' or '+' from becoming editor flags.
+for index in "${!files[@]}"; do
+  files[index]="./${files[index]}"
+done
+exec "$editor" "${files[@]}"

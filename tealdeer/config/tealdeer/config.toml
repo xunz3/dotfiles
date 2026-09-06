@@ -1,0 +1,23 @@
+[display]
+compact = false
+use_pager = false
+show_title = true
+placeholder_format = "both"
+
+[style.command_name]
+foreground = "cyan"
+bold = true
+
+[style.example_text]
+foreground = "green"
+
+[style.example_code]
+foreground = "blue"
+
+[style.example_variable]
+foreground = "yellow"
+underline = true
+
+[updates]
+auto_update = true
+auto_update_interval_hours = 168

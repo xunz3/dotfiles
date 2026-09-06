@@ -1,12 +1,19 @@
 #!/bin/sh
 #
-# Quick search in a directory for a string ($@).
+# Quick recursive text search with a portable fallback.
 #
-set -e
+set -eu
 
-# use -iru to search directories ack usually ignores (like .git)
-if [ -x /usr/bin/ack-grep ]; then
-    ack-grep -i "$@"
-else
-    ack -i "$@"
+if [ "$#" -eq 0 ]; then
+	echo 'usage: search <pattern> [path ...]' >&2
+	exit 2
 fi
+
+if command -v rg >/dev/null 2>&1; then
+	exec rg --smart-case "$@"
+fi
+
+case "$1" in
+  *[[:upper:]]*) exec grep -RIn --exclude-dir=.git -- "$@" ;;
+  *) exec grep -RIin --exclude-dir=.git -- "$@" ;;
+esac
